@@ -63,6 +63,7 @@ const allowedOrigins = [
   "https://www.zusko.in",
   "https://admin.zusko.in",
   "https://business.zusko.in",
+  "https://adminzusko.vercel.app"
 ];
 
 app.use(

@@ -114,7 +114,7 @@ function buildEmailHtml(lead, quote) {
             The complete quotation, including terms and conditions,
             is attached as a PDF. For any questions, reply to this
             email or call us at ${
-              process.env.SUPPORT_PHONE || "+91 90000 00000"
+              process.env.SUPPORT_PHONE || "+91 8004411976"
             }.
           </p>
         </td>
@@ -147,11 +147,11 @@ export async function sendQuoteEmail(lead, quote, pdfBuffer) {
   const mailer = getTransporter();
 
   const info = await mailer.sendMail({
-    from: `"Zusko Laundry Services" <${
+    from: `"Zusko Commercial Laundry Services" <${
       process.env.SMTP_QUOTE_MAIL || process.env.SMTP_USER
     }>`,
     to: lead.email,
-    subject: "Your Laundry Service Proposal from Zusko",
+    subject: "Your Commercial Laundry Service Proposal from Zusko",
     html: buildEmailHtml(lead, quote),
     attachments: [
       {
