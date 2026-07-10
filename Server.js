@@ -56,7 +56,37 @@ app.use(
     },
   })
 );
-app.use(cors({ origin: true })) // adjust origin in production to specific domain
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "https://zusko.in",
+  "https://www.zusko.in",
+  "https://admin.zusko.in",
+  "https://business.zusko.in",
+];
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow requests without an Origin (Postman, curl, server-to-server)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
+  })
+);
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 if (process.env.NODE_ENV === 'development') app.use(morgan('dev'))
