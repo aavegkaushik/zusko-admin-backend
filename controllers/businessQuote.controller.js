@@ -6,8 +6,8 @@ import BusinessLead from "../Models/BusinessLead.js";
 import BusinessCustomer from "../Models/Businesscustomer.js";
 
 import { generateQuoteNumber } from "../utils/quoteNumber.js";
-import { generateQuotePDF as buildQuotePDF } from "../utils/quotePdf.js";
-import { sendQuoteEmail as sendQuoteEmailUtil } from "../utils/quoteMail.js";
+import { generateQuotePDF as buildQuotePDF } from "../utils/quotePDF.js"
+import { sendQuoteEmail as sendQuoteEmailUtil } from "../utils/quoteMail.js"
 
 import { fileURLToPath } from "url";
 
