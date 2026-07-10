@@ -14,7 +14,7 @@ import {
 import {
 //   verifyToken,
 //   verifyAdmin,
-} from "../middleware/auth.middleware.js";
+} from "../Middleware/auth.middleware.js";
 
 const router = express.Router();
 

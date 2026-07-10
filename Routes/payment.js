@@ -2,7 +2,7 @@ import express from "express";
 import {
   razorpayWebhook,
   getPaymentStatus,
-} from "../Controllers/payment.js";
+} from "../controllers/payment.js";
 
 import auth from "../Middleware/auth.middleware.js";
 
