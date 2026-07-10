@@ -1,7 +1,7 @@
 import express from "express";
 import auth from "../Middleware/auth.middleware.js";
 import Vendor from "../Models/Vendor.js";
-import { uploadAvatar } from "../middleware/upload.middleware.js";
+import { uploadAvatar } from "../Middleware/upload.middleware.js";
 
 const router = express.Router();
 
