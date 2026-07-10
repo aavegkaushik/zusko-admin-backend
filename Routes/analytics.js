@@ -2,7 +2,7 @@
 import express from "express"
 import mongoose from "mongoose"
 import auth from "../Middleware/auth.middleware.js"
-import Order from "../models/Order.js"
+import Order from "../Models/Order.js"
 
 const router = express.Router()
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id)

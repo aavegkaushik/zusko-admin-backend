@@ -7,7 +7,7 @@ import QRCode from "qrcode";
 import dayjs from "dayjs";
 
 import auth from "../Middleware/auth.middleware.js";
-import Order from "../models/Order.js";
+import Order from "../Models/Order.js";
 import User from "../Models/Vendor.js";
 
 const router = express.Router();
