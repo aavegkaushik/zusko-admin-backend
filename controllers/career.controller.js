@@ -1,5 +1,5 @@
-import Job from "../models/Job.model.js";
-import Application from "../models/Application.model.js";
+import Job from "../Models/Job.model.js";
+import Application from "../Models/Application.model.js";
 import { sendEmail } from "../utils/sendmail.js";
 // import { uploadToCloudinary } from "../utils/uploadToCloudinary.js";
 
