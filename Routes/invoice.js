@@ -6,7 +6,7 @@ import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import dayjs from "dayjs";
 
-import auth from "../middleware/auth.middleware.js";
+import auth from "../Middleware/auth.middleware.js";
 import Order from "../models/Order.js";
 import User from "../Models/Vendor.js";
 

@@ -1,5 +1,5 @@
 import express from "express";
-import auth from "../middleware/auth.middleware.js";
+import auth from "../Middleware/auth.middleware.js";
 import Vendor from "../Models/Vendor.js";
 import { uploadAvatar } from "../middleware/upload.middleware.js";
 

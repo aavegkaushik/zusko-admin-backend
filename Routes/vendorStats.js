@@ -1,7 +1,7 @@
 // backend/routes/vendorStats.js (ESM)
 import express from "express"
 import mongoose from "mongoose"
-import auth from "../middleware/auth.middleware.js"
+import auth from "../Middleware/auth.middleware.js"
 import Order from "../Models/Order.js"
 
 const router = express.Router()

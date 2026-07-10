@@ -4,7 +4,7 @@ import {
   getPaymentStatus,
 } from "../Controllers/payment.js";
 
-import auth from "../middleware/auth.middleware.js";
+import auth from "../Middleware/auth.middleware.js";
 
 const router = express.Router();
 

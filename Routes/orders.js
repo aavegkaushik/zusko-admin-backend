@@ -3,7 +3,7 @@
 
 import express from "express"
 import mongoose from "mongoose"
-import auth from "../middleware/auth.middleware.js" // expects req.user when provided
+import auth from "../Middleware/auth.middleware.js" // expects req.user when provided
 import Order from "../Models/Order.js"
 import { sendEmail } from "../utils/sendmail.js";
 import { generateDeliveredEmail } from "../utils/orderEmails.js";

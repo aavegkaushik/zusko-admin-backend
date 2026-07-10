@@ -2,7 +2,7 @@
 import express from "express"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
-import auth from "../middleware/auth.middleware.js"
+import auth from "../Middleware/auth.middleware.js"
 import Vendor from "../Models/Vendor.js"
 
 const router = express.Router()

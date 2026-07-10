@@ -1,7 +1,7 @@
 // backend/routes/analytics.js
 import express from "express"
 import mongoose from "mongoose"
-import auth from "../middleware/auth.middleware.js"
+import auth from "../Middleware/auth.middleware.js"
 import Order from "../models/Order.js"
 
 const router = express.Router()
