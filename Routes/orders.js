@@ -7,13 +7,22 @@ import auth from "../Middleware/auth.middleware.js" // expects req.user when pro
 import Order from "../Models/Order.js"
 import { sendEmail } from "../utils/sendmail.js";
 import { generateDeliveredEmail } from "../utils/orderEmails.js";
-
+import { emitToVendor } from "../socket.js";
 const router = express.Router()
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id)
 
 // Allowed statuses and simple transition guard (optional)
-const ALLOWED_STATUSES = ["pending","picked-up", "in-progress", "ready-for-delivery", "out-for-delivery", "completed", "cancelled"]
+const ALLOWED_STATUSES = [
+  "pending",
+  "accepted",
+  "picked-up",
+  "in-progress",
+  "ready-for-delivery",
+  "out-for-delivery",
+  "completed",
+  "cancelled"
+]
 
 // ---------------------------
 // GET /api/orders
@@ -126,8 +135,52 @@ router.post("/", authOptional, async (req, res) => {
     // set default status if missing
     payload.status = payload.status || "pending"
 
-    const order = await Order.create(payload)
-    return res.status(201).json({ message: "Order created", data: order })
+    const order = await Order.create(payload);
+
+/**
+ * Notify the vendor/admin dashboard immediately.
+ *
+ * The vendor room is based on order.vendorId.
+ */
+emitToVendor(order.vendorId, "new_order", {
+  success: true,
+
+  order: {
+    _id: order._id,
+    orderId: order.orderId,
+    vendorId: order.vendorId,
+
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    customerEmail: order.customerEmail,
+
+    items: order.items,
+
+    total: order.total,
+    originalTotal: order.originalTotal,
+    discount: order.discount,
+    deliveryFee: order.deliveryFee,
+    handlingFee: order.handlingFee,
+
+    pickup: order.pickup,
+    address: order.address,
+
+    payment: order.payment,
+
+    status: order.status,
+
+    createdAt: order.createdAt,
+  },
+});
+
+console.log(
+  `🔔 New order event emitted for vendor ${order.vendorId}`
+);
+
+return res.status(201).json({
+  message: "Order created",
+  data: order,
+});
   } catch (err) {
     console.error("POST /api/orders error:", err)
     res.status(500).json({ message: "Server error", error: err.message })
@@ -189,6 +242,37 @@ router.patch("/:id/status", auth, async (req, res) => {
   }
 ).lean();
 
+// =========================================================
+// REALTIME ORDER STATUS UPDATE
+// Notify vendor dashboard immediately
+// =========================================================
+
+if (updated?.vendorId) {
+  emitToVendor(
+    updated.vendorId,
+    "order_status_updated",
+    {
+      success: true,
+
+      orderId: String(updated._id),
+
+      order: updated,
+
+      status: updated.status,
+
+      updatedAt: updated.updatedAt,
+
+      isPending: updated.status === "pending",
+    }
+  );
+
+  console.log(
+    `📡 Realtime status emitted: ${
+      updated.orderId || updated._id
+    } → ${updated.status}`
+  );
+}
+
 if (
     status === "cancelled" &&
     updated.payment?.status === "paid"
@@ -231,6 +315,184 @@ return res.json({
   } catch (err) {
     console.error("PATCH /api/orders/:id/status error:", err)
     return res.status(500).json({ message: "Server error", error: err.message })
+  }
+})
+
+// POST /api/orders/:id/accept
+// Accept a pending order
+// Only admin/vendor can accept.
+// Vendor can only accept their own order.
+// IMPORTANT:
+// Uses atomic findOneAndUpdate so two dashboard tabs
+// cannot accept the same pending order simultaneously.
+router.post("/:id/accept", auth, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        message: "Invalid order id",
+      })
+    }
+
+    // Only admin/vendor can accept orders
+    if (!["admin", "vendor"].includes(req.user.role)) {
+      return res.status(403).json({
+        message: "Only admin or vendor can accept orders",
+      })
+    }
+
+    // Atomically change ONLY pending -> accepted
+    //
+    // If another request already accepted this order,
+    // this query returns null.
+    const updated = await Order.findOneAndUpdate(
+      {
+        _id: id,
+        status: "pending",
+
+        // Vendor can only accept their own order.
+        ...(req.user.role === "vendor"
+          ? { vendorId: req.user.id }
+          : {}),
+      },
+      {
+        $set: {
+          status: "accepted",
+          acceptedAt: new Date(),
+          acceptedBy: req.user.id,
+          updatedAt: new Date(),
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    ).lean()
+
+    // =========================================================
+// REALTIME STATUS UPDATE
+// Notify vendor dashboard immediately
+// =========================================================
+
+// emitToVendor(
+//   updated.vendorId,
+//   "order_status_updated",
+//   {
+//     success: true,
+
+//     orderId: String(updated._id),
+
+//     order: updated,
+
+//     status: updated.status,
+
+//     updatedAt: updated.updatedAt,
+
+//     // Used by frontend to stop pending-order notification
+//     isPending:
+//       updated.status === "pending",
+//   }
+// );
+
+    // Order was already accepted / cancelled / moved forward
+    // OR vendor doesn't own it.
+    if (!updated) {
+  const existingOrder = await Order.findById(id)
+    .select("status vendorId")
+    .lean();
+
+  if (!existingOrder) {
+    return res.status(404).json({
+      message: "Order not found",
+    });
+  }
+
+  if (
+    req.user.role === "vendor" &&
+    String(existingOrder.vendorId) !==
+      String(req.user.id)
+  ) {
+    return res.status(403).json({
+      message: "You are not allowed to accept this order",
+    });
+  }
+
+  if (existingOrder.status !== "pending") {
+    return res.status(409).json({
+      message: `Order cannot be accepted because it is already ${existingOrder.status}`,
+      status: existingOrder.status,
+    });
+  }
+
+  return res.status(409).json({
+    message: "Order could not be accepted",
+  });
+}
+
+// =========================================================
+// NOW UPDATED ORDER DEFINITELY EXISTS
+// =========================================================
+
+emitToVendor(
+  updated.vendorId,
+  "order_status_updated",
+  {
+    success: true,
+    orderId: String(updated._id),
+    order: updated,
+    status: updated.status,
+    updatedAt: updated.updatedAt,
+    isPending: false,
+  }
+);
+
+    // =========================================================
+// NOTIFY DASHBOARD THAT ORDER WAS ACCEPTED
+// =========================================================
+
+emitToVendor(
+  updated.vendorId,
+  "order_accepted",
+  {
+    success: true,
+
+    orderId: String(
+      updated._id
+    ),
+
+    acceptedAt:
+      updated.acceptedAt,
+
+    acceptedBy:
+      updated.acceptedBy,
+
+    status:
+      updated.status,
+  }
+);
+
+console.log(
+  `✅ Order accepted event emitted for vendor ${updated.vendorId}`
+);
+
+    console.log(
+      `Order ${updated.orderId || updated._id} accepted by ${req.user.email || req.user.id}`
+    )
+
+    return res.json({
+      success: true,
+      message: "Order accepted successfully",
+      data: updated,
+    })
+  } catch (err) {
+    console.error("POST /api/orders/:id/accept error:", err)
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    })
   }
 })
 

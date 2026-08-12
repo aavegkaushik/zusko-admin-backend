@@ -19,6 +19,7 @@ import vendorProfileRoutes from './Routes/vendor.profile.js'
 import careerRoutes from "./Routes/career.routes.js";
 import paymentRoutes from "./Routes/payment.js";
 import businessQuoteRoutes from "./Routes/businessQuote.route.js";
+import { initSocket } from "./socket.js";
 // import paymentWebhookRoutes from "./Routes/payment.webhook.js";
 // --- Config (from env) ---
 
@@ -168,9 +169,13 @@ async function connectWithRetry(uri, retries = 5, delay = 2000) {
 async function start() {
   await connectWithRetry(process.env.MONGO_URI)
   const server = app.listen(process.env.PORT, () => {
-    
-    console.log(`Server listening on port ${process.env.PORT}`)
-  })
+  console.log(`Server listening on port ${process.env.PORT}`);
+});
+
+// Initialize Socket.IO on the same HTTP server
+initSocket(server);
+
+console.log("🔌 Socket.IO initialized");
 
   // Graceful shutdown
   const shutdown = async (signal) => {

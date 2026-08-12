@@ -15,6 +15,7 @@ const ItemSchema = new Schema(
 // === Update: include all statuses used by routes ===
 const STATUS_ENUM = [
   "pending",
+  "accepted",
   "picked-up",
   "in-progress",
   "ready-for-delivery",
@@ -165,16 +166,46 @@ rating: {
 
     // === Use canonical enum that matches your routes ===
     status: {
-      type: String,
-      enum: STATUS_ENUM,
-      default: "pending",
-      index: true,
-    },
+  type: String,
+  enum: STATUS_ENUM,
+  default: "pending",
+  index: true,
+},
 
-    pickedAt: { type: Date },
-    deliveredAt: { type: Date },
-    notes: { type: String },
-    meta: { type: Schema.Types.Mixed, default: {} },
+// ========================================
+// ORDER ACCEPTANCE
+// ========================================
+
+acceptedAt: {
+  type: Date,
+  default: null,
+},
+
+acceptedBy: {
+  type: Schema.Types.ObjectId,
+  ref: "User",
+  default: null,
+},
+
+pickedAt: {
+  type: Date,
+  default: null,
+},
+
+deliveredAt: {
+  type: Date,
+  default: null,
+},
+
+notes: {
+  type: String,
+},
+
+meta: {
+  type: Schema.Types.Mixed,
+  default: {},
+},
+
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
 
@@ -316,6 +347,19 @@ OrderSchema.pre("findOneAndUpdate", function () {
         update.$push.history = historyEntry
       }
     }
+
+    // ---------- acceptedAt ----------
+if (
+  finalStatus === "accepted" &&
+  !("acceptedAt" in update.$set) &&
+  !("acceptedAt" in update)
+) {
+  update.$set.acceptedAt = new Date()
+
+  if (update.acceptedAt) {
+    delete update.acceptedAt
+  }
+}
 
     // ---------- pickedAt / deliveredAt and updatedAt ----------
     if (finalStatus === "in-progress" && !("pickedAt" in update.$set) && !("pickedAt" in update)) {
