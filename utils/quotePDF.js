@@ -5,19 +5,25 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 /* ------------------------------------------------------------------ */
-/* Design tokens - keep every color/spacing decision here so the PDF   */
-/* has one visual identity across the whole document.                 */
+/* Design tokens - Bluish Green → Yellow                              */
 /* ------------------------------------------------------------------ */
 
 const COLORS = {
-  ink: "#0B1220", // primary text / headings
-  slate: "#475569", // secondary text
-  muted: "#94A3B8", // captions / footer text
-  accent: "#0F766E", // Zusko teal - brand accent
-  accentSoft: "#E6F4F2", // pale teal for table header / highlight fills
-  border: "#E2E8F0",
-  rowAlt: "#F8FAFC",
-  danger: "#DC2626",
+  ink: "#181818",
+  slate: "#555555",
+  muted: "#888888",
+
+  // Pure Yellow Theme
+  accent: "#EAB308",
+  accentDark: "#B77900",
+  accentSoft: "#FFF8D6",
+  yellow: "#FACC15",
+  yellowSoft: "#FFFBEA",
+
+  border: "#E5E5E5",
+  rowAlt: "#FFFDF3",
+
+  danger: "#D64545",
 };
 
 const FONT = {
@@ -25,24 +31,35 @@ const FONT = {
   bold: "Helvetica-Bold",
 };
 
-const PAGE = { width: 595.28, height: 841.89, margin: 50 }; // A4 in points
+const PAGE = {
+  width: 595.28,
+  height: 841.89,
+  margin: 50,
+};
+
 const CONTENT_WIDTH = PAGE.width - PAGE.margin * 2;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const LOGO_PATH = path.join(__dirname, "../assets/logo.png");
-const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "info@zusko.in";
-const SUPPORT_PHONE = process.env.SUPPORT_PHONE || "+91 8004411976";
+const LOGO_PATH = path.join(__dirname, "../public/image/fullLogo.png");
+
+const SUPPORT_EMAIL =
+  process.env.SUPPORT_EMAIL || "info@zusko.in";
+
+const SUPPORT_PHONE =
+  process.env.SUPPORT_PHONE || "+91 8004411976";
+
 const CLIENT_URL =
-  process.env.CLIENT_URL || "http://localhost:5174" || "https://zusko.in";
+  process.env.CLIENT_URL || "https://zusko.in";
 
 /* ------------------------------------------------------------------ */
-/* Small drawing helpers                                              */
+/* Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
 function money(value) {
   const n = Number(value || 0);
+
   return `Rs. ${n.toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -51,6 +68,7 @@ function money(value) {
 
 function formatDate(date) {
   if (!date) return "-";
+
   return new Date(date).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -58,26 +76,27 @@ function formatDate(date) {
   });
 }
 
-/** Ensures there is room left on the page; adds a new page + repeats the
- *  running header band if not, so long quotes paginate cleanly. */
-function ensureSpace(doc, requiredHeight, currentY) {
-  const bottomLimit = PAGE.height - PAGE.margin - 60; // leave room for footer
-  if (currentY + requiredHeight > bottomLimit) {
-    doc.addPage();
-    drawRunningHeader(doc);
-    return PAGE.margin + 40;
-  }
-  return currentY;
-}
+/* ------------------------------------------------------------------ */
+/* Header                                                             */
+/* ------------------------------------------------------------------ */
+
+
+
 
 function drawRunningHeader(doc) {
   doc
-    .rect(0, 0, PAGE.width, 6)
-    .fill(COLORS.accent);
+    .rect(0, 0, PAGE.width, 5)
+    .fill(COLORS.yellow);
 }
 
+/* ------------------------------------------------------------------ */
+/* Footer                                                             */
+/* ------------------------------------------------------------------ */
+
 function drawFooter(doc, pageNumber) {
-  const y = PAGE.height - PAGE.margin + 10;
+  const y = PAGE.height - 38;
+
+  // Thin separator
   doc
     .moveTo(PAGE.margin, y)
     .lineTo(PAGE.width - PAGE.margin, y)
@@ -85,96 +104,200 @@ function drawFooter(doc, pageNumber) {
     .strokeColor(COLORS.border)
     .stroke();
 
+  // Brand
   doc
-    .font(FONT.regular)
-    .fontSize(8)
-    .fillColor(COLORS.muted)
+    .font(FONT.bold)
+    .fontSize(7.5)
+    .fillColor(COLORS.ink)
     .text(
-      `Zusko Laundry Services  |  ${SUPPORT_EMAIL}  |  ${SUPPORT_PHONE}`,
+      "ZUSKO",
       PAGE.margin,
-      y + 10,
-      { width: CONTENT_WIDTH / 2 }
+      y + 9
     );
 
-  doc.text(`Page ${pageNumber}`, PAGE.margin, y + 10, {
-    width: CONTENT_WIDTH,
-    align: "right",
-  });
+  // Contact information
+  doc
+    .font(FONT.regular)
+    .fontSize(7)
+    .fillColor(COLORS.muted)
+    .text(
+      "Laundry Services  •  info@zusko.in  •  +91 8004411976",
+      PAGE.margin + 38,
+      y + 9,
+      {
+        width: CONTENT_WIDTH - 90,
+        align: "left",
+      }
+    );
+
+  // Page number
+  doc
+    .font(FONT.bold)
+    .fontSize(7)
+    .fillColor(COLORS.accentDark)
+    .text(
+      `${pageNumber}`,
+      PAGE.width - PAGE.margin - 25,
+      y + 9,
+      {
+        width: 25,
+        align: "right",
+      }
+    );
 }
 
 /* ------------------------------------------------------------------ */
-/* Main export                                                        */
+/* Main PDF Renderer                                                  */
+/* IMPORTANT: This renderer intentionally stays on ONE A4 page.       */
 /* ------------------------------------------------------------------ */
 
 function renderDocument(doc, quote, lead) {
-  let y = PAGE.margin + 30;
+  let y = 38;
 
-  /* ---------------- Header: Logo + Company / Quote meta card ------- */
-  const headerTop = y;
+  /* ================================================================ */
+  /* HEADER                                                            */
+  /* ================================================================ */
 
-  if (fs.existsSync(LOGO_PATH)) {
-    doc.image(LOGO_PATH, PAGE.margin, headerTop, { width: 110 });
-  } else {
-    doc
-      .font(FONT.bold)
-      .fontSize(22)
-      .fillColor(COLORS.ink)
-      .text("ZUSKO", PAGE.margin, headerTop);
-    doc
-      .font(FONT.regular)
-      .fontSize(9)
-      .fillColor(COLORS.accent)
-      .text("PROFESSIONAL LAUNDRY SERVICES", PAGE.margin, headerTop + 26);
-  }
+  const headerH = 78;
 
-  // Quote meta card (top-right)
-  const cardWidth = 210;
-  const cardX = PAGE.width - PAGE.margin - cardWidth;
+  const cardWidth = 205;
+
+  const cardX =
+    PAGE.width -
+    PAGE.margin -
+    cardWidth;
+
+  // Logo
+if (fs.existsSync(LOGO_PATH)) {
+  doc.image(LOGO_PATH, PAGE.margin, y, {
+    width: 125,
+    height: 53,
+    fit: [125, 53],
+    align: "left",
+    valign: "center",
+  });
+}
+
+  /* Quote information card */
+
   doc
-    .roundedRect(cardX, headerTop - 5, cardWidth, 80, 8)
-    .fillAndStroke(COLORS.accentSoft, COLORS.border);
+    .roundedRect(
+      cardX,
+      y - 3,
+      cardWidth,
+      66,
+      9
+    )
+    .fillAndStroke(
+      COLORS.accentSoft,
+      COLORS.border
+    );
+
+  // Accent vertical bar
+  doc
+    .roundedRect(
+      cardX,
+      y - 3,
+      6,
+      66,
+      9
+    )
+    .fill(COLORS.accent);
 
   doc
     .font(FONT.bold)
-    .fontSize(13)
-    .fillColor(COLORS.accent)
-    .text(quote.quoteNumber, cardX + 14, headerTop + 8, {
-      width: cardWidth - 28,
-    });
+    .fontSize(12)
+    .fillColor(COLORS.accentDark)
+    .text(
+      quote.quoteNumber || "-",
+      cardX + 16,
+      y + 7,
+      {
+        width: cardWidth - 28,
+      }
+    );
 
   doc
     .font(FONT.regular)
-    .fontSize(9)
+    .fontSize(8.5)
     .fillColor(COLORS.slate)
-    .text(`Date: ${formatDate(quote.createdAt || Date.now())}`, cardX + 14, headerTop + 30)
-    .text(`Valid Till: ${formatDate(quote.validTill)}`, cardX + 14, headerTop + 46)
-    .text(`Status: ${quote.status}`, cardX + 14, headerTop + 62);
+    .text(
+      `Date: ${formatDate(
+        quote.createdAt || Date.now()
+      )}`,
+      cardX + 16,
+      y + 28
+    )
+    .text(
+      `Valid Till: ${formatDate(
+        quote.validTill
+      )}`,
+      cardX + 16,
+      y + 41
+    )
+    .text(
+      `Status: ${quote.status || "-"}`,
+      cardX + 16,
+      y + 54
+    );
 
-  y = headerTop + 100;
+  // Yellow separator
+  doc
+    .rect(
+      PAGE.margin,
+      y + headerH - 3,
+      CONTENT_WIDTH,
+      3
+    )
+    .fill(COLORS.yellow);
+
+  y += headerH + 12;
+
+  /* ================================================================ */
+  /* PREPARED FOR / PREPARED BY                                       */
+  /* ================================================================ */
+
+  const gap = 20;
+
+  const colWidth =
+    (CONTENT_WIDTH - gap) / 2;
 
   doc
-    .moveTo(PAGE.margin, y)
-    .lineTo(PAGE.width - PAGE.margin, y)
-    .lineWidth(1)
-    .strokeColor(COLORS.border)
-    .stroke();
+    .font(FONT.bold)
+    .fontSize(8.5)
+    .fillColor(COLORS.accentDark)
+    .text(
+      "PREPARED FOR",
+      PAGE.margin,
+      y
+    )
+    .text(
+      "PREPARED BY",
+      PAGE.margin + colWidth + gap,
+      y
+    );
 
-  y += 24;
+  doc
+    .font(FONT.bold)
+    .fontSize(10)
+    .fillColor(COLORS.ink)
+    .text(
+      lead.businessName || "-",
+      PAGE.margin,
+      y + 13,
+      {
+        width: colWidth,
+      }
+    )
+    .text(
+      "Zusko Laundry Services Pvt. Ltd.",
+      PAGE.margin + colWidth + gap,
+      y + 13,
+      {
+        width: colWidth,
+      }
+    );
 
-  /* ---------------- Prepared For / Prepared By ---------------------- */
-  const colWidth = CONTENT_WIDTH / 2 - 12;
-
-  doc.font(FONT.bold).fontSize(10).fillColor(COLORS.accent);
-  doc.text("PREPARED FOR", PAGE.margin, y);
-  doc.text("PREPARED BY", PAGE.margin + colWidth + 24, y);
-
-  doc.font(FONT.bold).fontSize(11).fillColor(COLORS.ink);
-  doc.text(lead.businessName || "-", PAGE.margin, y + 16, { width: colWidth });
-  doc.text("Zusko Laundry Services Pvt. Ltd.", PAGE.margin + colWidth + 24, y + 16, {
-    width: colWidth,
-  });
-
-  doc.font(FONT.regular).fontSize(9).fillColor(COLORS.slate);
   const leadLines = [
     lead.ownerName,
     lead.address,
@@ -184,266 +307,763 @@ function renderDocument(doc, quote, lead) {
   ]
     .filter(Boolean)
     .join("\n");
-  doc.text(leadLines, PAGE.margin, y + 34, { width: colWidth, lineGap: 3 });
 
   const usLines = [
-    "Corporate Office, Sector 63",
-    "Noida, Uttar Pradesh, India",
+    "Corporate Office, Bundelkhand Innovation & Incubation Center Foundation",
+    "Jhansi, Uttar Pradesh, India",
     SUPPORT_PHONE,
     SUPPORT_EMAIL,
   ].join("\n");
-  doc.text(usLines, PAGE.margin + colWidth + 24, y + 34, {
-    width: colWidth,
-    lineGap: 3,
-  });
 
-  y += 34 + 70;
+  doc
+    .font(FONT.regular)
+    .fontSize(7.8)
+    .fillColor(COLORS.slate)
+    .text(
+      leadLines || "-",
+      PAGE.margin,
+      y + 29,
+      {
+        width: colWidth,
+        height: 55,
+        lineGap: 1.5,
+      }
+    )
+    .text(
+      usLines,
+      PAGE.margin + colWidth + gap,
+      y + 29,
+      {
+        width: colWidth,
+        height: 55,
+        lineGap: 1.5,
+      }
+    );
 
-  /* ---------------- Service Line Item Table -------------------------- */
-  y = ensureSpace(doc, 40, y);
+  y += 86;
+
+  /* ================================================================ */
+  /* SERVICE TABLE                                                     */
+  /* ================================================================ */
 
   const cols = [
-    { key: "serviceName", label: "Service", width: 0.34 },
-    { key: "quantity", label: "Qty", width: 0.12, align: "center" },
-    { key: "unit", label: "Unit", width: 0.14, align: "center" },
-    { key: "price", label: "Rate", width: 0.16, align: "right" },
-    { key: "subtotal", label: "Subtotal", width: 0.24, align: "right" },
-  ].map((c) => ({ ...c, px: c.width * CONTENT_WIDTH }));
+    {
+      key: "serviceName",
+      label: "SERVICE",
+      width: 0.34,
+    },
+    {
+      key: "quantity",
+      label: "QTY",
+      width: 0.10,
+      align: "center",
+    },
+    {
+      key: "unit",
+      label: "UNIT",
+      width: 0.13,
+      align: "center",
+    },
+    {
+      key: "price",
+      label: "RATE",
+      width: 0.17,
+      align: "right",
+    },
+    {
+      key: "subtotal",
+      label: "SUBTOTAL",
+      width: 0.26,
+      align: "right",
+    },
+  ].map((c) => ({
+    ...c,
+    px: c.width * CONTENT_WIDTH,
+  }));
 
   function colX(index) {
     let x = PAGE.margin;
-    for (let i = 0; i < index; i++) x += cols[i].px;
+
+    for (let i = 0; i < index; i++) {
+      x += cols[i].px;
+    }
+
     return x;
   }
 
-  function drawTableHeader(rowY) {
-    doc.rect(PAGE.margin, rowY, CONTENT_WIDTH, 26).fill(COLORS.ink);
-    doc.font(FONT.bold).fontSize(9).fillColor("#FFFFFF");
-    cols.forEach((c, i) => {
-      doc.text(c.label.toUpperCase(), colX(i) + 8, rowY + 8, {
-        width: c.px - 16,
+  const tableHeaderH = 23;
+
+  // Table header
+doc
+  .roundedRect(
+    PAGE.margin,
+    y,
+    CONTENT_WIDTH,
+    tableHeaderH,
+    5
+  )
+  .fill(COLORS.yellow);
+
+  doc
+    .font(FONT.bold)
+    .fontSize(7.8)
+    .fillColor("#FFFFFF");
+
+  cols.forEach((c, i) => {
+    doc.text(
+      c.label,
+      colX(i) + 7,
+      y + 7,
+      {
+        width: c.px - 14,
         align: c.align || "left",
-      });
-    });
-    return rowY + 26;
-  }
-
-  y = drawTableHeader(y);
-
-  quote.services.forEach((item, idx) => {
-    const rowHeight = 26;
-    y = ensureSpace(doc, rowHeight + 4, y);
-    // if we paginated, ensureSpace already redrew running header;
-    // repeat the table header on the fresh page for readability
-    if (y === PAGE.margin + 40) {
-      y = drawTableHeader(y);
-    }
-
-    if (idx % 2 === 1) {
-      doc.rect(PAGE.margin, y, CONTENT_WIDTH, rowHeight).fill(COLORS.rowAlt);
-    }
-
-    doc.font(FONT.regular).fontSize(9.5).fillColor(COLORS.ink);
-    doc.text(item.serviceName, colX(0) + 8, y + 8, { width: cols[0].px - 16 });
-    doc.text(String(item.quantity), colX(1) + 8, y + 8, {
-      width: cols[1].px - 16,
-      align: "center",
-    });
-    doc.text(item.unit, colX(2) + 8, y + 8, {
-      width: cols[2].px - 16,
-      align: "center",
-    });
-    doc.text(money(item.price), colX(3) + 8, y + 8, {
-      width: cols[3].px - 16,
-      align: "right",
-    });
-    doc.font(FONT.bold).text(money(item.subtotal), colX(4) + 8, y + 8, {
-      width: cols[4].px - 16,
-      align: "right",
-    });
-
-    y += rowHeight;
+      }
+    );
   });
 
+  y += tableHeaderH;
+
+  const serviceRows =
+    quote.services || [];
+
+  // Smaller rows if there are many services
+  const rowH =
+    serviceRows.length > 10
+      ? 17
+      : 20;
+
+  serviceRows.forEach(
+    (item, idx) => {
+      // Alternate rows
+      if (idx % 2 === 1) {
+        doc
+          .rect(
+            PAGE.margin,
+            y,
+            CONTENT_WIDTH,
+            rowH
+          )
+          .fill(COLORS.rowAlt);
+      }
+
+      doc
+        .font(FONT.regular)
+        .fontSize(
+          serviceRows.length > 10
+            ? 7.5
+            : 8.2
+        )
+        .fillColor(COLORS.ink);
+
+      // Service
+      doc.text(
+        String(
+          item.serviceName || "-"
+        ),
+        colX(0) + 7,
+        y + 5,
+        {
+          width: cols[0].px - 14,
+          height: rowH - 4,
+          ellipsis: true,
+        }
+      );
+
+      // Quantity
+      doc.text(
+        String(
+          item.quantity ?? "-"
+        ),
+        colX(1) + 7,
+        y + 5,
+        {
+          width: cols[1].px - 14,
+          align: "center",
+        }
+      );
+
+      // Unit
+      doc.text(
+        String(
+          item.unit || "-"
+        ),
+        colX(2) + 7,
+        y + 5,
+        {
+          width: cols[2].px - 14,
+          align: "center",
+        }
+      );
+
+      // Rate
+      doc.text(
+        money(item.price),
+        colX(3) + 7,
+        y + 5,
+        {
+          width: cols[3].px - 14,
+          align: "right",
+        }
+      );
+
+      // Subtotal
+      doc
+        .font(FONT.bold)
+        .text(
+          money(item.subtotal),
+          colX(4) + 7,
+          y + 5,
+          {
+            width:
+              cols[4].px - 14,
+            align: "right",
+          }
+        );
+
+      y += rowH;
+    }
+  );
+
+  // Table bottom line
   doc
     .moveTo(PAGE.margin, y)
-    .lineTo(PAGE.width - PAGE.margin, y)
-    .lineWidth(1)
+    .lineTo(
+      PAGE.width - PAGE.margin,
+      y
+    )
+    .lineWidth(0.8)
     .strokeColor(COLORS.border)
     .stroke();
 
-  y += 16;
+  y += 11;
 
-  /* ---------------- Totals block (right aligned) --------------------- */
-  y = ensureSpace(doc, 160, y);
-  const totalsWidth = 240;
-  const totalsX = PAGE.width - PAGE.margin - totalsWidth;
+  /* ================================================================ */
+  /* NOTES + COMMERCIAL INFO + TOTALS                                 */
+  /* ================================================================ */
 
-  function totalRow(label, value, opts = {}) {
-    doc
-      .font(opts.bold ? FONT.bold : FONT.regular)
-      .fontSize(opts.bold ? 11 : 9.5)
-      .fillColor(opts.color || COLORS.slate);
-    doc.text(label, totalsX, y, { width: totalsWidth * 0.55 });
-    doc.text(value, totalsX + totalsWidth * 0.55, y, {
-      width: totalsWidth * 0.45,
-      align: "right",
-    });
-    y += opts.bold ? 22 : 18;
-  }
+  const totalsWidth = 218;
 
-  totalRow("Subtotal", money(quote.subtotal));
+  const totalsX =
+    PAGE.width -
+    PAGE.margin -
+    totalsWidth;
 
-  if (quote.discount?.amount > 0) {
-    const label =
-      quote.discount.type === "percentage"
-        ? `Discount (${quote.discount.value}%)`
-        : "Discount";
-    totalRow(label, `- ${money(quote.discount.amount)}`, {
-      color: COLORS.danger,
-    });
-  }
+  const leftWidth =
+    CONTENT_WIDTH -
+    totalsWidth -
+    20;
 
-  if (quote.pickupCharge > 0) {
-    totalRow("Pickup Charge", money(quote.pickupCharge));
-  }
+  const bottomTop = y;
 
-  (quote.additionalCharges || []).forEach((charge) => {
-    totalRow(charge.label, money(charge.amount));
-  });
+  /* Notes */
 
-  if (quote.gst?.amount > 0) {
-    totalRow(`GST (${quote.gst.percentage}%)`, money(quote.gst.amount));
-  }
-
-  y += 4;
-  doc
-    .roundedRect(totalsX - 12, y - 4, totalsWidth + 12, 34, 6)
-    .fill(COLORS.accentSoft);
-  doc.fillColor(COLORS.accent);
-  totalRow("GRAND TOTAL", money(quote.grandTotal), { bold: true, color: COLORS.accent });
-
-  y += 30;
-
-  /* ---------------- Notes ------------------------------------------- */
   if (quote.notes) {
-    y = ensureSpace(doc, 60, y);
-    doc.font(FONT.bold).fontSize(10).fillColor(COLORS.accent).text("NOTES", PAGE.margin, y);
-    y += 16;
+    doc
+      .font(FONT.bold)
+      .fontSize(8.5)
+      .fillColor(COLORS.accentDark)
+      .text(
+        "NOTES",
+        PAGE.margin,
+        y
+      );
+
     doc
       .font(FONT.regular)
-      .fontSize(9)
+      .fontSize(7.8)
       .fillColor(COLORS.slate)
-      .text(quote.notes, PAGE.margin, y, { width: CONTENT_WIDTH, lineGap: 3 });
-    y += doc.heightOfString(quote.notes, { width: CONTENT_WIDTH, lineGap: 3 }) + 16;
+      .text(
+        quote.notes,
+        PAGE.margin,
+        y + 13,
+        {
+          width: leftWidth,
+          height: 55,
+          lineGap: 2,
+        }
+      );
   }
 
-  /* ---------------- Payment / Turnaround summary strip --------------- */
-  y = ensureSpace(doc, 50, y);
+  /* Commercial strip */
+
+  const stripY =
+    y + (quote.notes ? 52 : 0);
+
+  doc
+    .roundedRect(
+      PAGE.margin,
+      stripY,
+      leftWidth,
+      58,
+      7
+    )
+    .fillAndStroke(
+      COLORS.yellowSoft,
+      COLORS.border
+    );
+
   const stripItems = [
-    ["Payment Terms", quote.paymentTerms],
-    ["Turnaround Time", quote.turnaroundTime],
-    ["Pickup Frequency", quote.pickupFrequency || "-"],
+    [
+      "PAYMENT TERMS",
+      quote.paymentTerms,
+    ],
+    [
+      "TURNAROUND",
+      quote.turnaroundTime,
+    ],
+    [
+      "PICKUP",
+      quote.pickupFrequency || "-",
+    ],
   ];
-  const stripColWidth = CONTENT_WIDTH / 3;
-  stripItems.forEach(([label, value], i) => {
-    const x = PAGE.margin + i * stripColWidth;
-    doc.font(FONT.bold).fontSize(8).fillColor(COLORS.muted).text(label.toUpperCase(), x, y);
-    doc.font(FONT.regular).fontSize(9.5).fillColor(COLORS.ink).text(value || "-", x, y + 12, {
-      width: stripColWidth - 10,
-    });
+
+  const stripColWidth =
+    leftWidth / 3;
+
+  stripItems.forEach(
+    ([label, value], i) => {
+      const x =
+        PAGE.margin +
+        i * stripColWidth +
+        8;
+
+      doc
+        .font(FONT.bold)
+        .fontSize(6.8)
+        .fillColor(COLORS.accentDark)
+        .text(
+          label,
+          x,
+          stripY + 10,
+          {
+            width:
+              stripColWidth - 14,
+          }
+        );
+
+      doc
+        .font(FONT.regular)
+        .fontSize(7.8)
+        .fillColor(COLORS.ink)
+        .text(
+          value || "-",
+          x,
+          stripY + 23,
+          {
+            width:
+              stripColWidth - 14,
+            height: 28,
+          }
+        );
+    }
+  );
+
+  /* ================================================================ */
+  /* TOTALS CARD                                                       */
+  /* ================================================================ */
+
+  doc
+    .roundedRect(
+      totalsX,
+      bottomTop,
+      totalsWidth,
+      122,
+      9
+    )
+    .fillAndStroke(
+      "#F7FCFB",
+      COLORS.border
+    );
+
+  let ty =
+    bottomTop + 12;
+
+  function totalRow(
+    label,
+    value,
+    opts = {}
+  ) {
+    doc
+      .font(
+        opts.bold
+          ? FONT.bold
+          : FONT.regular
+      )
+      .fontSize(
+        opts.bold
+          ? 10.5
+          : 8.2
+      )
+      .fillColor(
+        opts.color ||
+          COLORS.slate
+      )
+      .text(
+        label,
+        totalsX + 12,
+        ty,
+        {
+          width:
+            totalsWidth * 0.56 -
+            12,
+        }
+      )
+      .text(
+        value,
+        totalsX +
+          totalsWidth *
+            0.56,
+        ty,
+        {
+          width:
+            totalsWidth *
+              0.44 -
+            12,
+          align: "right",
+        }
+      );
+
+    ty += opts.bold
+      ? 20
+      : 16;
+  }
+
+  totalRow(
+    "Subtotal",
+    money(quote.subtotal)
+  );
+
+  /* Discount */
+
+  if (
+    quote.discount?.amount > 0
+  ) {
+    const label =
+      quote.discount.type ===
+      "percentage"
+        ? `Discount (${quote.discount.value}%)`
+        : "Discount";
+
+    totalRow(
+      label,
+      `- ${money(
+        quote.discount.amount
+      )}`,
+      {
+        color:
+          COLORS.danger,
+      }
+    );
+  }
+
+  /* Pickup charge */
+
+  if (
+    quote.pickupCharge > 0
+  ) {
+    totalRow(
+      "Pickup Charge",
+      money(
+        quote.pickupCharge
+      )
+    );
+  }
+
+  /* Additional charges */
+
+  (
+    quote.additionalCharges ||
+    []
+  ).forEach((charge) => {
+    totalRow(
+      charge.label,
+      money(charge.amount)
+    );
   });
-  y += 50;
 
-  /* ---------------- Terms & Conditions -------------------------------- */
-  y = ensureSpace(doc, 80, y);
-  doc.font(FONT.bold).fontSize(10).fillColor(COLORS.accent).text("TERMS & CONDITIONS", PAGE.margin, y);
-  y += 16;
+  /* GST */
+
+  if (
+    quote.gst?.amount > 0
+  ) {
+    totalRow(
+      `GST (${quote.gst.percentage}%)`,
+      money(
+        quote.gst.amount
+      )
+    );
+  }
+
+  /* Grand total */
+
+  ty += 2;
+
   doc
-    .font(FONT.regular)
+    .roundedRect(
+      totalsX + 7,
+      ty - 4,
+      totalsWidth - 14,
+      31,
+      6
+    )
+    .fill(COLORS.accentSoft);
+
+  doc
+    .font(FONT.bold)
+    .fontSize(10.5)
+    .fillColor(
+      COLORS.accentDark
+    )
+    .text(
+      "GRAND TOTAL",
+      totalsX + 17,
+      ty + 5,
+      {
+        width: 100,
+      }
+    )
+    .text(
+      money(quote.grandTotal),
+      totalsX + 112,
+      ty + 5,
+      {
+        width:
+          totalsWidth - 130,
+        align: "right",
+      }
+    );
+
+  /* ================================================================ */
+  /* TERMS & CONDITIONS                                                */
+  /* ================================================================ */
+
+  const termsY = Math.max(
+    stripY + 69,
+    bottomTop + 136
+  );
+
+  doc
+    .font(FONT.bold)
     .fontSize(8.5)
-    .fillColor(COLORS.slate)
-    .text(quote.terms, PAGE.margin, y, { width: CONTENT_WIDTH, lineGap: 3 });
-  y += doc.heightOfString(quote.terms, { width: CONTENT_WIDTH, lineGap: 3 }) + 30;
+    .fillColor(
+      COLORS.accentDark
+    )
+    .text(
+      "TERMS & CONDITIONS",
+      PAGE.margin,
+      termsY
+    );
 
-  /* ---------------- Signature + QR code block -------------------------- */
-  y = ensureSpace(doc, 110, y);
-
-  // Signature line (left)
-  doc
-    .moveTo(PAGE.margin, y + 50)
-    .lineTo(PAGE.margin + 200, y + 50)
-    .lineWidth(1)
-    .strokeColor(COLORS.border)
-    .stroke();
   doc
     .font(FONT.regular)
-    .fontSize(9)
+    .fontSize(7.3)
     .fillColor(COLORS.slate)
-    .text("Authorized Signatory - Zusko Laundry Services", PAGE.margin, y + 56);
+    .text(
+      quote.terms || "-",
+      PAGE.margin,
+      termsY + 13,
+      {
+        width:
+          CONTENT_WIDTH - 105,
+        height: 65,
+        lineGap: 1.7,
+      }
+    );
 
-  // QR code (right) - links to the online accept/reject page.
-  // The actual QR PNG is generated asynchronously (see generateQuotePDF)
-  // and injected into this reserved slot once the layout pass is done.
-  const qrLink = `${CLIENT_URL}/quotes/${quote._id}/respond`;
-  doc._quoteQrSlot = { x: PAGE.width - PAGE.margin - 90, y, size: 80, link: qrLink };
+  /* ================================================================ */
+  /* SIGNATURE + QR                                                    */
+  /* ================================================================ */
+
+  const signY =
+    PAGE.height - 132;
+
+  doc
+    .moveTo(
+      PAGE.margin,
+      signY + 38
+    )
+    .lineTo(
+      PAGE.margin + 190,
+      signY + 38
+    )
+    .lineWidth(0.8)
+    .strokeColor(
+      COLORS.border
+    )
+    .stroke();
 
   doc
     .font(FONT.regular)
     .fontSize(7.5)
+    .fillColor(COLORS.slate)
+    .text(
+      "Authorized Signatory - Zusko Laundry Services",
+      PAGE.margin,
+      signY + 44
+    );
+
+  /* QR */
+
+  const qrLink =
+    `http://zusko.in/quotes/${quote._id}/respond`;
+
+  doc._quoteQrSlot = {
+    x:
+      PAGE.width -
+      PAGE.margin -
+      82,
+
+    y: signY - 2,
+
+    size: 70,
+
+    link: qrLink,
+  };
+
+  doc
+    .font(FONT.regular)
+    .fontSize(6.8)
     .fillColor(COLORS.muted)
-    .text("Scan to view & respond online", doc._quoteQrSlot.x - 15, y + 84, {
-      width: 110,
-      align: "center",
-    });
+    .text(
+      "Scan to view & respond online",
+      doc._quoteQrSlot.x - 17,
+      signY + 70,
+      {
+        width: 105,
+        align: "center",
+      }
+    );
 }
 
-/**
- * Public entry point. Wraps buildQuotePDF so the QR code (which requires
- * an async PNG buffer) is generated first and injected into the layout.
- */
-async function generateQuotePDF(quote, lead) {
-  const qrLink = `${CLIENT_URL}/quotes/${quote._id}/respond`;
-  const qrDataUrl = await QRCode.toDataURL(qrLink, { margin: 0, width: 160 });
-  const qrBuffer = Buffer.from(qrDataUrl.split(",")[1], "base64");
+/* ------------------------------------------------------------------ */
+/* Generate Quote PDF                                                 */
+/* ------------------------------------------------------------------ */
 
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({
-        size: "A4",
-        margin: PAGE.margin,
-        bufferPages: true,
-        info: {
-          Title: `Zusko Quote ${quote.quoteNumber}`,
-          Author: "Zusko Laundry Services",
-        },
-      });
+async function generateQuotePDF(
+  quote,
+  lead
+) {
+  const qrLink =
+    `${CLIENT_URL}/quotes/${quote._id}/respond`;
 
-      const chunks = [];
-      doc.on("data", (c) => chunks.push(c));
-      doc.on("end", () => resolve(Buffer.concat(chunks)));
-      doc.on("error", reject);
-
-      drawRunningHeader(doc);
-      renderDocument(doc, quote, lead);
-
-      // Inject the QR image into the reserved slot
-      if (doc._quoteQrSlot) {
-        const { x, y, size } = doc._quoteQrSlot;
-        doc.image(qrBuffer, x, y, { width: size, height: size });
+  const qrDataUrl =
+    await QRCode.toDataURL(
+      qrLink,
+      {
+        margin: 0,
+        width: 160,
       }
+    );
 
-      const range = doc.bufferedPageRange();
-      for (let i = range.start; i < range.start + range.count; i++) {
-        doc.switchToPage(i);
-        drawFooter(doc, i + 1);
+  const qrBuffer = Buffer.from(
+    qrDataUrl.split(",")[1],
+    "base64"
+  );
+
+  return new Promise(
+    (resolve, reject) => {
+      try {
+        const doc =
+          new PDFDocument({
+            size: "A4",
+            margin: PAGE.margin,
+
+            // Keep PDF as a single page
+            bufferPages: true,
+
+            info: {
+              Title:
+                `Zusko Quote ${quote.quoteNumber}`,
+              Author:
+                "Zusko Laundry Services",
+            },
+          });
+
+        const chunks = [];
+
+        doc.on(
+          "data",
+          (chunk) => {
+            chunks.push(chunk);
+          }
+        );
+
+        doc.on(
+          "end",
+          () => {
+            resolve(
+              Buffer.concat(chunks)
+            );
+          }
+        );
+
+        doc.on(
+          "error",
+          reject
+        );
+
+        /* Header */
+
+        drawRunningHeader(doc);
+
+        /* Main document */
+
+        renderDocument(
+          doc,
+          quote,
+          lead
+        );
+
+        /* Inject QR */
+
+        if (
+          doc._quoteQrSlot
+        ) {
+          const {
+            x,
+            y,
+            size,
+          } = doc._quoteQrSlot;
+
+          doc.image(
+            qrBuffer,
+            x,
+            y,
+            {
+              width: size,
+              height: size,
+            }
+          );
+        }
+
+        /* Footer */
+
+        const range =
+          doc.bufferedPageRange();
+
+        for (
+          let i = range.start;
+          i <
+          range.start +
+            range.count;
+          i++
+        ) {
+          doc.switchToPage(i);
+
+          drawFooter(
+            doc,
+            i + 1
+          );
+        }
+
+        doc.end();
+      } catch (err) {
+        reject(err);
       }
-
-      doc.end();
-    } catch (err) {
-      reject(err);
     }
-  });
+  );
 }
 
-export { generateQuotePDF };
+export {
+  generateQuotePDF,
+};
