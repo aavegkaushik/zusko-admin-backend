@@ -1,18 +1,41 @@
-// backend/models/Order.js (fixed)
-import mongoose from "mongoose"
+// backend/models/Order.js
 
-const { Schema } = mongoose
+import mongoose from "mongoose";
+
+const { Schema } = mongoose;
 
 const ItemSchema = new Schema(
   {
-    name: { type: String, required: true },
-    qty: { type: Number, required: true, min: 1 },
-    price: { type: Number, required: true, min: 0 },
+    name: {
+      type: String,
+      required: true,
+    },
+
+    qty: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    careLevel: {
+      type: String,
+      enum: ["regular", "premium"],
+      default: "regular",
+    },
   },
   { _id: false }
-)
+);
 
-// === Update: include all statuses used by routes ===
+// ========================================
+// ORDER STATUS
+// ========================================
+
 const STATUS_ENUM = [
   "pending",
   "accepted",
@@ -22,19 +45,42 @@ const STATUS_ENUM = [
   "out-for-delivery",
   "completed",
   "cancelled",
-]
+];
+
+// ========================================
+// PAYMENT STATUS
+// ========================================
 
 const PAYMENT_STATUS_ENUM = [
-  "pending",        // Order created but payment not initiated
-  "initiated",      // Payment gateway started
-  "paid",           // Money received successfully
-  "failed",         // Payment failed
-  "refunded",       // Money refunded
-  "cod"             // Cash on delivery
-]
+  "pending",
+  "initiated",
+  "paid",
+  "failed",
+  "refunded",
+  "cod",
+];
+
+// ========================================
+// ORDER SCHEMA
+// ========================================
 
 const OrderSchema = new Schema(
   {
+    // ========================================
+    // ORDER ID
+    // ========================================
+
+    orderId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+
+    // ========================================
+    // VENDOR
+    // ========================================
+
     vendorId: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -42,368 +88,690 @@ const OrderSchema = new Schema(
       index: true,
     },
 
-    customerName: { type: String, default: "Guest" },
-    customerPhone: { type: String },
+    // ========================================
+    // CUSTOMER
+    // ========================================
+
+    customerName: {
+      type: String,
+      default: "Guest",
+    },
+
+    customerPhone: {
+      type: String,
+    },
+
     customerId: {
-  type: Schema.Types.ObjectId,
-  ref: "User",
-},
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
 
-    
+    // ========================================
+    // ORDER ITEMS
+    // ========================================
 
-    items: { type: [ItemSchema], default: [] },
+    items: {
+      type: [ItemSchema],
+      default: [],
+    },
 
-    total: { type: Number, min: 0, default: 0 },
+    // ========================================
+    // ORDER TOTALS
+    // ========================================
+
+    total: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
 
     originalTotal: {
-  type: Number,
-  default: 0,
-},
+      type: Number,
+      default: 0,
+    },
 
-discount: {
-  type: Number,
-  default: 0,
-},
+    discount: {
+      type: Number,
+      default: 0,
+    },
 
-deliveryFee: {
-  type: Number,
-  default: 0,
-},
+    deliveryFee: {
+      type: Number,
+      default: 0,
+    },
 
-handlingFee: {
-  type: Number,
-  default: 0,
-},
+    handlingFee: {
+      type: Number,
+      default: 0,
+    },
 
-    //Payment Status
+    // ========================================
+    // PAYMENT
+    // ========================================
+
     payment: {
       status: {
-    type: String,
-    enum: PAYMENT_STATUS_ENUM,
-    default: "pending",
-    index: true,
-  },
+        type: String,
+        enum: PAYMENT_STATUS_ENUM,
+        default: "pending",
+        index: true,
+      },
 
-  method: {
-    type: String, // UPI, Razorpay, COD, Wallet, etc
-  },
+      method: {
+        type: String,
+        // UPI, Razorpay, COD, Wallet, etc.
+      },
 
-  transactionId: {
-    type: String,
-    index: true,
-  },
+      transactionId: {
+        type: String,
+        index: true,
+      },
+
+      amount: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
+    },
+
+    // ========================================
+    // ORDER QR CODE
+    // ========================================
+    //
+    // IMPORTANT:
+    // These fields are intentionally OUTSIDE
+    // the payment object.
+    //
+    // qrId = random unique token stored in DB
+    // qrGeneratedAt = time QR was generated
+    // qrLink = optional future scan URL
+    // qrExpiresAt = optional future expiry
+    //
+    // QR image itself is generated at runtime
+    // and is NOT stored in MongoDB.
+    // ========================================
 
     qrId: {
-    type: String,
-    index: true,
-  },
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
 
-  qrImage: String,
+    qrGeneratedAt: {
+      type: Date,
+      default: null,
+    },
 
-  qrLink: String,
+    qrLink: {
+      type: String,
+      default: null,
+    },
 
-  qrExpiresAt: Date,
+    qrExpiresAt: {
+      type: Date,
+      default: null,
+    },
 
-  qrGeneratedAt: Date,
+    // ========================================
+    // PICKUP
+    // ========================================
 
-  amount: {
-    type: Number,
-    min: 0,
-    default: 0,
-  },
-  pickup: {
-  date: String,
-  time: String,
-},
+    pickup: {
+      date: String,
+      time: String,
+    },
 
-address: {
-  fullAddress: String,
-  landmark: String,
-  city: String,
-  pincode: String,
-},
+    // ========================================
+    // ADDRESS
+    // ========================================
 
-  paidAt: {
-    type: Date,
-  },
+    address: {
+      fullAddress: String,
+      landmark: String,
+      city: String,
+      pincode: String,
+    },
 
-  refundedAt: {
-    type: Date,
-  },
-},
+    // ========================================
+    // PAYMENT / REFUND DATES
+    // ========================================
 
-refund: {
-  status: {
-    type: String,
-    enum: ["none", "processing", "refunded", "failed"],
-    default: "none",
-  },
+    paidAt: {
+      type: Date,
+    },
 
-  refundId: String,
+    refundedAt: {
+      type: Date,
+    },
 
-  amount: Number,
+    // ========================================
+    // REFUND
+    // ========================================
 
-  initiatedAt: Date,
+    refund: {
+      status: {
+        type: String,
+        enum: ["none", "processing", "refunded", "failed"],
+        default: "none",
+      },
 
-  completedAt: Date,
-},
+      refundId: String,
 
-rating: {
-  stars: {
-    type: Number,
-    min: 1,
-    max: 5,
-  },
+      amount: Number,
 
-  review: {
-    type: String,
-    default: "",
-  },
+      initiatedAt: Date,
 
-  ratedAt: Date,
-},
+      completedAt: Date,
+    },
 
+    // ========================================
+    // RATING
+    // ========================================
 
-    // === Use canonical enum that matches your routes ===
+    rating: {
+      stars: {
+        type: Number,
+        min: 1,
+        max: 5,
+      },
+
+      review: {
+        type: String,
+        default: "",
+      },
+
+      ratedAt: Date,
+    },
+
+    // ========================================
+    // ORDER STATUS
+    // ========================================
+
     status: {
-  type: String,
-  enum: STATUS_ENUM,
-  default: "pending",
-  index: true,
-},
+      type: String,
+      enum: STATUS_ENUM,
+      default: "pending",
+      index: true,
+    },
 
-// ========================================
-// ORDER ACCEPTANCE
-// ========================================
+    // ========================================
+    // ORDER ACCEPTANCE
+    // ========================================
 
-acceptedAt: {
-  type: Date,
-  default: null,
-},
+    acceptedAt: {
+      type: Date,
+      default: null,
+    },
 
-acceptedBy: {
-  type: Schema.Types.ObjectId,
-  ref: "User",
-  default: null,
-},
+    acceptedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
 
-pickedAt: {
-  type: Date,
-  default: null,
-},
+    // ========================================
+    // PICKED / DELIVERED
+    // ========================================
 
-deliveredAt: {
-  type: Date,
-  default: null,
-},
+    pickedAt: {
+      type: Date,
+      default: null,
+    },
 
-notes: {
-  type: String,
-},
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
 
-meta: {
-  type: Schema.Types.Mixed,
-  default: {},
-},
+    // ========================================
+    // NOTES
+    // ========================================
 
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now },
+    notes: {
+      type: String,
+    },
 
-    // optional history (useful)
+    // ========================================
+    // META
+    // ========================================
+
+    meta: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+
+    // ========================================
+    // TIMESTAMPS
+    // ========================================
+
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+
+    // ========================================
+    // ORDER STATUS HISTORY
+    // ========================================
+
     history: {
       type: [
         {
-          status: { type: String, enum: STATUS_ENUM, required: true },
-          changedAt: { type: Date, default: Date.now },
-          note: { type: String },
+          status: {
+            type: String,
+            enum: STATUS_ENUM,
+            required: true,
+          },
+
+          changedAt: {
+            type: Date,
+            default: Date.now,
+          },
+
+          note: {
+            type: String,
+          },
         },
       ],
+
       default: [],
     },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
-)
+  {
+    timestamps: {
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+    },
+  }
+);
 
-// Pre-save hook: recompute total, push status history if changed
+// ========================================
+// PRE-SAVE HOOK
+// Recompute total + payment amount
+// + push status history
+// ========================================
+
 OrderSchema.pre("save", function (next) {
   try {
-    // recompute total
+    // ----------------------------------------
+    // Recompute total
+    // ----------------------------------------
+
     if (Array.isArray(this.items) && this.items.length) {
       const sum = this.items.reduce(
-        (acc, it) => acc + (Number(it.qty || 0) * Number(it.price || 0)),
+        (acc, it) =>
+          acc +
+          Number(it.qty || 0) *
+            Number(it.price || 0),
         0
-      )
-      this.total = sum
+      );
+
+      this.total = sum;
     } else {
-      this.total = 0
+      this.total = 0;
     }
 
-    // sync payment amount
-if (this.payment) {
-  this.payment.amount = this.total
+    // ----------------------------------------
+    // Sync payment amount
+    // ----------------------------------------
 
-  if (this.payment.status === "paid" && !this.payment.paidAt) {
-    this.payment.paidAt = new Date()
-  }
-}
+    if (this.payment) {
+      this.payment.amount = this.total;
 
-    // push history entry when status changed (document saves)
-    if (typeof this.isModified === "function" && this.isModified("status")) {
-      this.history = this.history || []
-      this.history.push({ status: this.status, changedAt: new Date() })
+      if (
+        this.payment.status === "paid" &&
+        !this.payment.paidAt
+      ) {
+        this.payment.paidAt = new Date();
+      }
     }
 
-    // set timestamps (mongoose already does this, but safe)
-    this.updatedAt = new Date()
-    if (!this.createdAt) this.createdAt = new Date()
+    // ----------------------------------------
+    // Push history entry when status changes
+    // ----------------------------------------
 
-    return next()
+    if (
+      typeof this.isModified === "function" &&
+      this.isModified("status")
+    ) {
+      this.history = this.history || [];
+
+      this.history.push({
+        status: this.status,
+        changedAt: new Date(),
+      });
+    }
+
+    // ----------------------------------------
+    // Timestamps
+    // ----------------------------------------
+
+    this.updatedAt = new Date();
+
+    if (!this.createdAt) {
+      this.createdAt = new Date();
+    }
+
+    return next();
   } catch (err) {
-    return next(err)
+    return next(err);
   }
-})
+});
 
-// Ensure findOneAndUpdate (used by findByIdAndUpdate) keeps total/history/timestamps in sync
+// ========================================
+// PRE FIND ONE AND UPDATE
+//
+// Used by findByIdAndUpdate()
+// Keeps totals, status history,
+// timestamps and payment in sync.
+// ========================================
+
 OrderSchema.pre("findOneAndUpdate", function () {
-  // `this` is the query
   try {
-    const update = this.getUpdate()
-    if (!update) return
+    const update = this.getUpdate();
 
-    // canonicalize helpers
+    if (!update) return;
+
+    // ========================================
+    // STATUS NORMALIZER
+    // ========================================
+
     const normalize = (s) =>
       String(s || "")
         .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "")
+        .replace(/(^-|-$)/g, "");
 
-    // ensure $set and $push exist for consistent handling
-    update.$set = update.$set || {}
-    update.$push = update.$push || {}
+    // ========================================
+    // Ensure $set / $push exist
+    // ========================================
 
-    // ---------- handle items -> recompute total if items replaced ----------
+    update.$set = update.$set || {};
+    update.$push = update.$push || {};
+
+    // ========================================
+    // ITEMS -> RECOMPUTE TOTAL
+    // ========================================
+
     const itemsBeingSet =
-      (update.$set && Array.isArray(update.$set.items)) || Array.isArray(update.items)
+      (update.$set &&
+        Array.isArray(update.$set.items)) ||
+      Array.isArray(update.items);
+
     if (itemsBeingSet) {
-      const items = Array.isArray(update.$set.items) ? update.$set.items : update.items
-      const sum = items.reduce((acc, it) => acc + (Number(it.qty || 0) * Number(it.price || 0)), 0)
-      update.$set.total = sum
-      // remove top-level total to avoid conflicts
-      if (typeof update.total !== "undefined") delete update.total
-      if (typeof update.items !== "undefined") delete update.items
+      const items = Array.isArray(update.$set.items)
+        ? update.$set.items
+        : update.items;
+
+      const sum = items.reduce(
+        (acc, it) =>
+          acc +
+          Number(it.qty || 0) *
+            Number(it.price || 0),
+        0
+      );
+
+      update.$set.total = sum;
+
+      // Remove conflicting top-level values
+      if (typeof update.total !== "undefined") {
+        delete update.total;
+      }
+
+      if (typeof update.items !== "undefined") {
+        delete update.items;
+      }
     }
 
-    // ---------- canonicalize status ----------
-    // read status from $set OR top-level
-    const rawStatus = (update.$set && update.$set.status) || update.status || null
-    let finalStatus = null
+    // ========================================
+    // CANONICALIZE STATUS
+    // ========================================
+
+    const rawStatus =
+      (update.$set && update.$set.status) ||
+      update.status ||
+      null;
+
+    let finalStatus = null;
+
     if (rawStatus) {
-      const matched = STATUS_ENUM.find((s) => normalize(s) === normalize(rawStatus))
-      finalStatus = matched || rawStatus
-      update.$set.status = finalStatus
-      if (update.status) delete update.status
+      const matched = STATUS_ENUM.find(
+        (s) =>
+          normalize(s) === normalize(rawStatus)
+      );
+
+      finalStatus = matched || rawStatus;
+
+      update.$set.status = finalStatus;
+
+      if (update.status) {
+        delete update.status;
+      }
     }
 
-    // ---------- prepare history entry ----------
-    const historyEntry = finalStatus ? { status: finalStatus, changedAt: new Date() } : null
+    // ========================================
+    // PREPARE HISTORY ENTRY
+    // ========================================
 
-    // ---------- resolve conflicts between $set.history, top-level history, and $push.history ----------
-    const topLevelHistory = Array.isArray(update.history) ? update.history : null
-    const setHistory = Array.isArray(update.$set.history) ? update.$set.history : null
-    const pushHistory = update.$push && update.$push.history ? update.$push.history : null
+    const historyEntry = finalStatus
+      ? {
+          status: finalStatus,
+          changedAt: new Date(),
+        }
+      : null;
+
+    // ========================================
+    // RESOLVE HISTORY CONFLICTS
+    // ========================================
+
+    const topLevelHistory = Array.isArray(
+      update.history
+    )
+      ? update.history
+      : null;
+
+    const setHistory = Array.isArray(
+      update.$set.history
+    )
+      ? update.$set.history
+      : null;
+
+    const pushHistory =
+      update.$push &&
+      update.$push.history
+        ? update.$push.history
+        : null;
 
     if (historyEntry) {
       if (topLevelHistory || setHistory) {
-        // combine whichever exists into a single array and set via $set
         const base = Array.isArray(setHistory)
           ? setHistory.slice()
           : Array.isArray(topLevelHistory)
           ? topLevelHistory.slice()
-          : []
-        base.push(historyEntry)
-        update.$set.history = base
-        if (update.history) delete update.history
-        if (update.$push && update.$push.history) delete update.$push.history
+          : [];
+
+        base.push(historyEntry);
+
+        update.$set.history = base;
+
+        if (update.history) {
+          delete update.history;
+        }
+
+        if (
+          update.$push &&
+          update.$push.history
+        ) {
+          delete update.$push.history;
+        }
       } else if (pushHistory) {
-        // $push.history already present - may be object or array
+        // ----------------------------------------
+        // $push.history is already present
+        // ----------------------------------------
+
         if (Array.isArray(pushHistory)) {
-          const base = pushHistory.slice()
-          base.push(historyEntry)
-          update.$set.history = base
-          delete update.$push.history
+          const base = pushHistory.slice();
+
+          base.push(historyEntry);
+
+          update.$set.history = base;
+
+          delete update.$push.history;
+        } else if (
+          typeof pushHistory === "object" &&
+          pushHistory.$each &&
+          Array.isArray(pushHistory.$each)
+        ) {
+          pushHistory.$each.push(historyEntry);
+
+          update.$push.history = pushHistory;
         } else {
-          // if $push.history is an object like { $each: [...] }, merge into $each
-          if (typeof pushHistory === "object" && pushHistory.$each && Array.isArray(pushHistory.$each)) {
-            pushHistory.$each.push(historyEntry)
-            update.$push.history = pushHistory
-          } else {
-            // simple case: $push.history is a single entry -> convert to $push with $each
-            update.$push.history = { $each: [pushHistory, historyEntry] }
-          }
+          update.$push.history = {
+            $each: [
+              pushHistory,
+              historyEntry,
+            ],
+          };
         }
       } else {
-        // nothing present: safe to $push our entry (object form is accepted)
-        update.$push.history = historyEntry
+        // ----------------------------------------
+        // No existing history update
+        // ----------------------------------------
+
+        update.$push.history = historyEntry;
       }
     }
 
-    // ---------- acceptedAt ----------
-if (
-  finalStatus === "accepted" &&
-  !("acceptedAt" in update.$set) &&
-  !("acceptedAt" in update)
-) {
-  update.$set.acceptedAt = new Date()
+    // ========================================
+    // ACCEPTED AT
+    // ========================================
 
-  if (update.acceptedAt) {
-    delete update.acceptedAt
-  }
-}
+    if (
+      finalStatus === "accepted" &&
+      !("acceptedAt" in update.$set) &&
+      !("acceptedAt" in update)
+    ) {
+      update.$set.acceptedAt = new Date();
 
-    // ---------- pickedAt / deliveredAt and updatedAt ----------
-    if (finalStatus === "in-progress" && !("pickedAt" in update.$set) && !("pickedAt" in update)) {
-      update.$set.pickedAt = new Date()
-      if (update.pickedAt) delete update.pickedAt
-    }
-    if (finalStatus === "completed" && !("deliveredAt" in update.$set) && !("deliveredAt" in update)) {
-      update.$set.deliveredAt = new Date()
-      if (update.deliveredAt) delete update.deliveredAt
+      if (update.acceptedAt) {
+        delete update.acceptedAt;
+      }
     }
 
-    // always set updatedAt
-    update.$set.updatedAt = new Date()
+    // ========================================
+    // PICKED AT
+    // ========================================
 
-    // clean up possible conflicting top-level fields that clash with $set
-    if (typeof update.total !== "undefined" && typeof update.$set.total !== "undefined") {
-      delete update.total
+    if (
+      finalStatus === "in-progress" &&
+      !("pickedAt" in update.$set) &&
+      !("pickedAt" in update)
+    ) {
+      update.$set.pickedAt = new Date();
+
+      if (update.pickedAt) {
+        delete update.pickedAt;
+      }
     }
-    if (typeof update.status !== "undefined" && typeof update.$set.status !== "undefined") {
-      delete update.status
+
+    // ========================================
+    // DELIVERED AT
+    // ========================================
+
+    if (
+      finalStatus === "completed" &&
+      !("deliveredAt" in update.$set) &&
+      !("deliveredAt" in update)
+    ) {
+      update.$set.deliveredAt = new Date();
+
+      if (update.deliveredAt) {
+        delete update.deliveredAt;
+      }
     }
-    if (typeof update.history !== "undefined" && typeof update.$set.history !== "undefined") {
-      delete update.history
+
+    // ========================================
+    // UPDATED AT
+    // ========================================
+
+    update.$set.updatedAt = new Date();
+
+    // ========================================
+    // CLEAN CONFLICTING TOP-LEVEL FIELDS
+    // ========================================
+
+    if (
+      typeof update.total !== "undefined" &&
+      typeof update.$set.total !== "undefined"
+    ) {
+      delete update.total;
     }
 
-    // ---------- payment sync ----------
-if (update.$set && update.$set["payment.status"] === "paid") {
-  update.$set["payment.paidAt"] = new Date()
-}
+    if (
+      typeof update.status !== "undefined" &&
+      typeof update.$set.status !== "undefined"
+    ) {
+      delete update.status;
+    }
 
-if (update.$set && update.$set.total && update.$set["payment.amount"] === undefined) {
-  update.$set["payment.amount"] = update.$set.total
-}
+    if (
+      typeof update.history !== "undefined" &&
+      typeof update.$set.history !== "undefined"
+    ) {
+      delete update.history;
+    }
 
-    // write back the resolved update
-    this.setUpdate(update)
+    // ========================================
+    // PAYMENT SYNC
+    // ========================================
+
+    if (
+      update.$set &&
+      update.$set["payment.status"] === "paid"
+    ) {
+      update.$set["payment.paidAt"] =
+        new Date();
+    }
+
+    if (
+      update.$set &&
+      update.$set.total &&
+      update.$set["payment.amount"] === undefined
+    ) {
+      update.$set["payment.amount"] =
+        update.$set.total;
+    }
+
+    // ========================================
+    // WRITE BACK RESOLVED UPDATE
+    // ========================================
+
+    this.setUpdate(update);
   } catch (err) {
-    console.error("Order pre-findOneAndUpdate error (conflict-resolver):", err)
+    console.error(
+      "Order pre-findOneAndUpdate error (conflict-resolver):",
+      err
+    );
   }
-})
+});
 
-// helper static
-OrderSchema.statics.getAllowedStatuses = function () {
-  return STATUS_ENUM.slice()
-}
+// ========================================
+// STATIC HELPER
+// ========================================
 
-export default mongoose.models.Order || mongoose.model("Order", OrderSchema)
+OrderSchema.statics.getAllowedStatuses =
+  function () {
+    return STATUS_ENUM.slice();
+  };
+
+// ========================================
+// EXPORT
+// ========================================
+
+export default mongoose.model("Order", OrderSchema);

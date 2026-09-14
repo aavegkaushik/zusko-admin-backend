@@ -1,6 +1,6 @@
 import dotenv from 'dotenv'
 dotenv.config({ override: true })
-
+import qrRoutes from "./Routes/qr.routes.js";
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -114,6 +114,7 @@ app.use('/api/orders', ordersRoutes)     // orders CRUD + vendor scoping
 app.use('/api/analytics', analyticsRoutes) // order aggregations
 app.use("/api/vendors", vendorStats)
 app.use("/api", invoiceRoutes)
+app.use("/api/qr", qrRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/vendors", vendorProfileRoutes);
 app.use("/api/careers", careerRoutes)
