@@ -278,6 +278,8 @@ router.get("/resolve/:qrId", auth, async (req, res) => {
       message: "QR resolved successfully",
 
       data: {
+        id: order._id,
+    _id: order._id,
         qrId: order.qrId,
         orderId: order.orderId,
         qrGeneratedAt: order.qrGeneratedAt,
