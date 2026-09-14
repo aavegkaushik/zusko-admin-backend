@@ -1270,4 +1270,125 @@ router.post(
 );
 
 
+// =====================================================
+// POST /api/qr/processing/stop
+// Stop / cancel active processing session
+// =====================================================
+
+router.post(
+  "/processing/stop",
+  auth,
+  async (req, res) => {
+    try {
+      const { sessionId } = req.body || {};
+
+      // -----------------------------------------
+      // Role check
+      // -----------------------------------------
+
+      if (!["admin", "vendor"].includes(req.user.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Admin or vendor access required",
+        });
+      }
+
+      // -----------------------------------------
+      // Validate
+      // -----------------------------------------
+
+      if (!sessionId) {
+        return res.status(400).json({
+          success: false,
+          message: "Session ID is required",
+        });
+      }
+
+      // -----------------------------------------
+      // Find active session
+      // -----------------------------------------
+
+      const session =
+        await ProcessingSession.findOne({
+          _id: sessionId,
+          status: "active",
+        }).lean();
+
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          message: "Active processing session not found",
+        });
+      }
+
+      // -----------------------------------------
+      // Find order
+      // -----------------------------------------
+
+      const order =
+        await Order.findById(session.orderId).lean();
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
+      }
+
+      // -----------------------------------------
+      // Vendor ownership
+      // -----------------------------------------
+
+      if (
+        req.user.role === "vendor" &&
+        String(order.vendorId) !== String(req.user.id)
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not allowed to stop this session",
+        });
+      }
+
+      // -----------------------------------------
+      // Stop session
+      // -----------------------------------------
+
+      const stoppedSession =
+        await ProcessingSession.findByIdAndUpdate(
+          sessionId,
+          {
+            $set: {
+              status: "cancelled",
+              completedAt: new Date(),
+            },
+          },
+          {
+            new: true,
+          }
+        ).lean();
+
+      return res.json({
+        success: true,
+        message: "Processing session stopped",
+        data: {
+          sessionId: stoppedSession._id,
+          orderId: stoppedSession.orderNumber,
+          status: stoppedSession.status,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Stop processing session error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to stop processing session",
+        error: error.message,
+      });
+    }
+  }
+);
+
 export default router;
