@@ -398,16 +398,10 @@ const OrderSchema = new Schema(
 
 OrderSchema.pre("save", function (next) {
   try {
-    // ----------------------------------------
-    // Recompute total
-    // ----------------------------------------
-
     if (Array.isArray(this.items) && this.items.length) {
       const sum = this.items.reduce(
-        (acc, it) =>
-          acc +
-          Number(it.qty || 0) *
-            Number(it.price || 0),
+        (acc, item) =>
+          acc + Number(item.qty || 0) * Number(item.price || 0),
         0
       );
 
@@ -416,24 +410,13 @@ OrderSchema.pre("save", function (next) {
       this.total = 0;
     }
 
-    // ----------------------------------------
-    // Sync payment amount
-    // ----------------------------------------
-
     if (this.payment) {
       this.payment.amount = this.total;
 
-      if (
-        this.payment.status === "paid" &&
-        !this.payment.paidAt
-      ) {
-        this.payment.paidAt = new Date();
+      if (this.payment.status === "paid" && !this.paidAt) {
+        this.paidAt = new Date();
       }
     }
-
-    // ----------------------------------------
-    // Push history entry when status changes
-    // ----------------------------------------
 
     if (
       typeof this.isModified === "function" &&
@@ -447,19 +430,15 @@ OrderSchema.pre("save", function (next) {
       });
     }
 
-    // ----------------------------------------
-    // Timestamps
-    // ----------------------------------------
-
     this.updatedAt = new Date();
 
     if (!this.createdAt) {
       this.createdAt = new Date();
     }
 
-    return next();
+    next();
   } catch (err) {
-    return next(err);
+    next(err);
   }
 });
 

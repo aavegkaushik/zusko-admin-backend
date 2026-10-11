@@ -25,6 +25,8 @@ import { initSocket } from "./socket.js";
 // import paymentWebhookRoutes from "./Routes/payment.webhook.js";
 // --- Config (from env) ---
 
+dotenv.config();
+
 if (!process.env.MONGO_URI) {
   console.error('ERROR: MONGODB_URI is not set in environment')
   process.exit(1)
@@ -91,7 +93,17 @@ app.use(
     ],
   })
 );
-app.use(express.json({ limit: '10mb' }))
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      if (
+        req.originalUrl === "/api/payment/razorpay/webhook"
+      ) {
+        req.rawBody = Buffer.from(buf);
+      }
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }))
 if (process.env.NODE_ENV === 'development') app.use(morgan('dev'))
 
@@ -123,6 +135,7 @@ app.use("/api/careers", careerRoutes)
 app.use("/api/payment", paymentRoutes);
 app.use("/api/pricing", pricingRoutes);
 app.use("/api/coupons", couponRoutes);
+
 app.use(
   "/api/business-leads",
   businessLeadRoutes
