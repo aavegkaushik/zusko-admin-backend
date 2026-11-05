@@ -32,7 +32,8 @@ function requireAdmin(req, res) {
     return false;
   }
 
-  if (req.user.role !== "vendor") {
+  const role = req.user?.role?.toLowerCase();
+  if (!role || !["admin", "vendor", "superadmin"].includes(role)) {
     res.status(403).json({
       success: false,
       message: "Admin access required",

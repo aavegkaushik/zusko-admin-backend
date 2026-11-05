@@ -6,6 +6,16 @@ const { Schema } = mongoose;
 
 const ItemSchema = new Schema(
   {
+    clothId: {
+      type: Schema.Types.ObjectId,
+      ref: "Pricing",
+    },
+
+    pricingId: {
+      type: Schema.Types.ObjectId,
+      ref: "Pricing",
+    },
+
     name: {
       type: String,
       required: true,
@@ -21,6 +31,64 @@ const ItemSchema = new Schema(
       type: Number,
       required: true,
       min: 0,
+    },
+
+    finalPrice: {
+      type: Number,
+      default: 0,
+    },
+
+    originalPrice: {
+      type: Number,
+      default: 0,
+    },
+
+    discountAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    discountPercentage: {
+      type: Number,
+      default: 0,
+    },
+
+    lineTotal: {
+      type: Number,
+      default: 0,
+    },
+
+    originalLineTotal: {
+      type: Number,
+      default: 0,
+    },
+
+    appliedPromotionName: {
+      type: String,
+      default: "",
+    },
+
+    appliedPromotion: {
+      id: { type: Schema.Types.ObjectId, ref: "Promotion" },
+      name: { type: String, default: "" },
+      badgeText: { type: String, default: "" },
+      discountType: { type: String, default: "" },
+      discountValue: { type: Number, default: 0 },
+    },
+
+    service: {
+      type: String,
+      default: "",
+    },
+
+    category: {
+      type: String,
+      default: "",
+    },
+
+    variant: {
+      type: String,
+      default: "",
     },
 
     careLevel: {
@@ -131,6 +199,11 @@ const OrderSchema = new Schema(
     },
 
     discount: {
+      type: Number,
+      default: 0,
+    },
+
+    promotionalDiscount: {
       type: Number,
       default: 0,
     },
@@ -387,6 +460,7 @@ const OrderSchema = new Schema(
       createdAt: "createdAt",
       updatedAt: "updatedAt",
     },
+    collection: "orders",
   }
 );
 

@@ -3,16 +3,6 @@ import Coupon from "../Models/Coupon.js";
 import CouponUsage from "../Models/CouponUsage.js";
 import User from "../Models/User.model.js";
 import Order from "../Models/Order.js";
-const adminOnly = (req, res, next) => {
-  if (req.user?.role !== "admin") {
-    return res.status(403).json({
-      success: false,
-      message: "Admin access required",
-    });
-  }
-
-  next();
-};
 
 const normalizeArray = (value) => {
   if (!value) return [];

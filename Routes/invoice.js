@@ -242,15 +242,17 @@ function drawItemsTable(doc, items, y) {
   const startX = PAGE.margin;
   const width = PAGE.width - PAGE.margin * 2;
 
-  // Header
+  // Header with full promotional transparency
   doc.roundedRect(startX, y, width, 34, 12).fillColor(COLORS.primary).fill();
 
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("white");
+  doc.font("Helvetica-Bold").fontSize(8.5).fillColor("white");
 
-  doc.text("SERVICE", startX + 18, y + 11);
-  doc.text("QTY", startX + 285, y + 11);
-  doc.text("PRICE", startX + 360, y + 11);
-  doc.text("AMOUNT", startX + 450, y + 11);
+  doc.text("ITEM / SERVICE", startX + 12, y + 12);
+  doc.text("ORIGINAL", startX + 160, y + 12, { width: 55, align: "right" });
+  doc.text("PROMO DISC", startX + 225, y + 12, { width: 65, align: "right" });
+  doc.text("FINAL PRICE", startX + 300, y + 12, { width: 60, align: "right" });
+  doc.text("QTY", startX + 370, y + 12, { width: 35, align: "center" });
+  doc.text("TOTAL", startX + 420, y + 12, { width: 80, align: "right" });
 
   y += 40;
 
@@ -258,8 +260,10 @@ function drawItemsTable(doc, items, y) {
 
   items.forEach((item, index) => {
     const qty = Number(item.qty || 0);
-    const price = Number(item.price || 0);
-    const total = qty * price;
+    const originalPrice = Number(item.originalPrice || item.price || 0);
+    const finalPrice = Number(item.finalPrice !== undefined ? item.finalPrice : item.price || 0);
+    const discountAmount = Number(item.discountAmount || (originalPrice > finalPrice ? originalPrice - finalPrice : 0));
+    const total = Number(item.lineTotal !== undefined ? item.lineTotal : qty * finalPrice);
 
     subtotal += total;
 
@@ -271,47 +275,73 @@ function drawItemsTable(doc, items, y) {
         .fill();
     }
 
-    // Service Name
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(10)
-      .fillColor(COLORS.primary)
-      .text(item.name || "Laundry Service", startX + 18, y + 4, {
-        width: 230,
-      });
-
-    // Qty Badge
-    doc
-      .roundedRect(startX + 285, y + 2, 28, 18, 8)
-      .fillColor(COLORS.yellow)
-      .fill();
+    // Service / Item Name with optional Promo Badge
+    let itemTitle = item.name || "Laundry Service";
+    if (item.appliedPromotionName) {
+      itemTitle += ` (${item.appliedPromotionName})`;
+    }
 
     doc
       .font("Helvetica-Bold")
       .fontSize(9)
       .fillColor(COLORS.primary)
-      .text(qty, startX + 285, y + 7, {
+      .text(itemTitle, startX + 12, y + 4, {
+        width: 145,
+        ellipsis: true,
+      });
+
+    // Original Price
+    doc
+      .font("Helvetica")
+      .fontSize(8.5)
+      .fillColor(COLORS.secondary)
+      .text(money(originalPrice), startX + 160, y + 4, {
+        width: 55,
+        align: "right",
+      });
+
+    // Promotional Discount
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8.5)
+      .fillColor(discountAmount > 0 ? COLORS.success : COLORS.muted)
+      .text(discountAmount > 0 ? `-${money(discountAmount)}` : "-", startX + 225, y + 4, {
+        width: 65,
+        align: "right",
+      });
+
+    // Final Unit Price
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8.5)
+      .fillColor(COLORS.primary)
+      .text(money(finalPrice), startX + 300, y + 4, {
+        width: 60,
+        align: "right",
+      });
+
+    // Qty Badge
+    doc
+      .roundedRect(startX + 372, y + 2, 28, 18, 8)
+      .fillColor(COLORS.yellow)
+      .fill();
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8.5)
+      .fillColor(COLORS.primary)
+      .text(qty, startX + 372, y + 6, {
         width: 28,
         align: "center",
       });
 
-    // Price
-    doc
-      .font("Helvetica")
-      .fontSize(10)
-      .fillColor(COLORS.secondary)
-      .text(money(price), startX + 350, y + 4, {
-        width: 70,
-        align: "right",
-      });
-
-    // Amount
+    // Total Amount
     doc
       .font("Helvetica-Bold")
-      .fontSize(10)
+      .fontSize(9)
       .fillColor(COLORS.primary)
-      .text(money(total), startX + 445, y + 4, {
-        width: 70,
+      .text(money(total), startX + 420, y + 4, {
+        width: 80,
         align: "right",
       });
 
@@ -338,30 +368,33 @@ async function drawSummarySection(doc, order, y) {
   // SUMMARY CARD
   // ===========================
 
-  card(doc, PAGE.margin, y, leftWidth, 185);
-
-  heading(doc, "Price Summary", PAGE.margin + 16, y + 16);
-
   const rows = [
+    ["Items Total (MRP)", money(order.originalTotal || order.subtotal)],
+    ...(order.promotionalDiscount > 0 ? [["Promotional Discount", `- ${money(order.promotionalDiscount)}`]] : []),
     ["Subtotal", money(order.subtotal)],
-    ["Discount", `- ${money(order.discount || 0)}`],
+    ...(order.discount > 0 ? [["Coupon Discount", `- ${money(order.discount)}`]] : []),
     ["Delivery Fee", money(order.deliveryFee || 0)],
     ["Handling Fee", money(order.handlingFee || 0)],
     ["GST", "INR 0.00"],
   ];
+
+  const cardHeight = Math.max(185, 45 + rows.length * 22 + 15);
+  card(doc, PAGE.margin, y, leftWidth, cardHeight);
+
+  heading(doc, "Price Summary", PAGE.margin + 16, y + 16);
 
   let yy = y + 45;
 
   rows.forEach(([labelText, valueText]) => {
     doc
       .font("Helvetica")
-      .fontSize(10)
+      .fontSize(9.5)
       .fillColor(COLORS.secondary)
       .text(labelText, PAGE.margin + 16, yy);
 
     doc
       .font("Helvetica-Bold")
-      .fillColor(COLORS.primary)
+      .fillColor(labelText.includes("Discount") ? COLORS.success : COLORS.primary)
       .text(valueText, PAGE.margin + 120, yy, {
         width: 150,
         align: "right",

@@ -16,10 +16,11 @@ import {
 const router = express.Router();
 
 const adminOnly = (req, res, next) => {
-  if (req.user?.role !== "vendor") {
+  const role = req.user?.role?.toLowerCase();
+  if (!role || !["admin", "vendor", "superadmin"].includes(role)) {
     return res.status(403).json({
       success: false,
-      message: "Admin access required",
+      message: "Admin or Vendor access required",
     });
   }
 

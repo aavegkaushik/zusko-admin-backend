@@ -21,6 +21,7 @@ import paymentRoutes from "./Routes/payment.js";
 import businessQuoteRoutes from "./Routes/businessQuote.route.js";
 import pricingRoutes from "./Routes/pricing.js";
 import couponRoutes from "./Routes/coupon.routes.js";
+import promotionRoutes from "./Routes/promotion.routes.js";
 import { initSocket } from "./socket.js";
 // import paymentWebhookRoutes from "./Routes/payment.webhook.js";
 // --- Config (from env) ---
@@ -135,6 +136,8 @@ app.use("/api/careers", careerRoutes)
 app.use("/api/payment", paymentRoutes);
 app.use("/api/pricing", pricingRoutes);
 app.use("/api/coupons", couponRoutes);
+app.use("/api/promotions", promotionRoutes);
+app.use("/promotions", promotionRoutes);
 
 app.use(
   "/api/business-leads",
