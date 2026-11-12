@@ -913,6 +913,17 @@ OrderSchema.pre("findOneAndUpdate", function () {
 });
 
 // ========================================
+// HIGH-PERFORMANCE COMPOUND INDEXES
+// ========================================
+
+OrderSchema.index({ vendorId: 1, createdAt: -1 });
+OrderSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
+OrderSchema.index({ status: 1, createdAt: -1 });
+OrderSchema.index({ vendorId: 1, orderId: 1 });
+OrderSchema.index({ "pickupPartner.partnerId": 1, status: 1 });
+OrderSchema.index({ "deliveryPartner.partnerId": 1, status: 1 });
+
+// ========================================
 // STATIC HELPER
 // ========================================
 

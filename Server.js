@@ -4,12 +4,14 @@ import qrRoutes from "./Routes/qr.routes.js";
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
+import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import mongoose from 'mongoose'
 import morgan from 'morgan'
 import businessLeadRoutes from "./Routes/businessLead.routes.js";
 // route imports
 import authRoutes from './Routes/auth.js'
+import auth from './Middleware/auth.middleware.js'
 import ordersRoutes from './Routes/orders.js'
 import analyticsRoutes from './Routes/analytics.js'
 import vendorStats from './Routes/vendorStats.js'
@@ -25,6 +27,8 @@ import promotionRoutes from "./Routes/promotion.routes.js";
 import deliveryPartnerRoutes from "./Routes/deliveryPartner.routes.js";
 import { initSocket } from "./socket.js";
 import { startOrderWatcher, stopOrderWatcher } from "./services/orderWatcher.js";
+import { initRedis, closeRedisConnection } from "./config/redis.js";
+import { metricsMiddleware, getPerformanceReport } from "./services/metrics.service.js";
 // import paymentWebhookRoutes from "./Routes/payment.webhook.js";
 // --- Config (from env) ---
 
@@ -96,6 +100,13 @@ app.use(
     ],
   })
 );
+
+// High-performance gzip response compression for payloads > 1KB
+app.use(compression());
+
+// Latency & performance tracking middleware
+app.use(metricsMiddleware);
+
 app.use(
   express.json({
     verify: (req, res, buf) => {
@@ -125,11 +136,26 @@ app.get('/healthz', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() })
 })
 
+// --- Performance Monitoring (Internal Admin Protected) ---
+app.get("/api/performance", auth, async (req, res) => {
+  try {
+    const role = req.user?.role?.toLowerCase();
+    if (!["admin", "superadmin"].includes(role)) {
+      return res.status(403).json({ message: "Forbidden: Admin access required" });
+    }
+    const report = await getPerformanceReport();
+    res.json({ ok: true, data: report });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to generate performance report", error: err.message });
+  }
+});
+
 // --- Mount API routes (implement these files next) ---
 app.use('/api/auth', authRoutes)         // auth: register / login
 app.use('/api/orders', ordersRoutes)     // orders CRUD + vendor scoping
 app.use('/api/analytics', analyticsRoutes) // order aggregations
 app.use("/api/vendors", vendorStats)
+app.use("/api/vendor", vendorStats)      // alias for singular routes like /api/vendor/dashboard/bootstrap
 app.use("/api", invoiceRoutes)
 app.use("/api/qr", qrRoutes);
 app.use("/api/settings", settingsRoutes);
@@ -172,8 +198,13 @@ app.use((err, req, res, next) => {
 async function connectWithRetry(uri, retries = 5, delay = 2000) {
   for (let i = 0; i < retries; i++) {
     try {
-      await mongoose.connect(process.env.MONGO_URI)
-      console.log("MongoDB connected")
+      await mongoose.connect(process.env.MONGO_URI, {
+        maxPoolSize: 50,
+        minPoolSize: 10,
+        socketTimeoutMS: 45000,
+        serverSelectionTimeoutMS: 5000,
+      })
+      console.log("MongoDB connected with optimized connection pooling (maxPool: 50)")
       return
     } catch (err) {
       console.error(`Mongo connection attempt ${i + 1} failed:`, err.message)
@@ -193,22 +224,27 @@ async function connectWithRetry(uri, retries = 5, delay = 2000) {
 // --- Start server after DB connected ---
 async function start() {
   await connectWithRetry(process.env.MONGO_URI)
+
+  // Initialize centralized Redis in-memory cache
+  initRedis();
+
   const server = app.listen(process.env.PORT, () => {
-  console.log(`Server listening on port ${process.env.PORT}`);
-});
+    console.log(`Server listening on port ${process.env.PORT}`);
+  });
 
-// Initialize Socket.IO on the same HTTP server
-initSocket(server);
+  // Initialize Socket.IO on the same HTTP server
+  initSocket(server);
 
-console.log("🔌 Socket.IO initialized");
+  console.log("🔌 Socket.IO initialized");
 
-// Start real-time order watcher (MongoDB Change Streams + resilient polling fallback)
-startOrderWatcher();
+  // Start real-time order watcher (MongoDB Change Streams + resilient polling fallback)
+  startOrderWatcher();
 
   // Graceful shutdown
   const shutdown = async (signal) => {
     console.log(`\nReceived ${signal}. Closing server...`)
     stopOrderWatcher();
+    await closeRedisConnection();
     server.close(async (err) => {
       if (err) {
         console.error('Error closing server', err)

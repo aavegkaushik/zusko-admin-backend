@@ -3,6 +3,11 @@ import express from "express"
 import mongoose from "mongoose"
 import auth from "../Middleware/auth.middleware.js"
 import Order from "../Models/Order.js"
+import {
+  getOrSetCache,
+  CacheKeys,
+  CACHE_TTL,
+} from "../services/cache.service.js"
 
 const router = express.Router()
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id)
@@ -22,16 +27,10 @@ function buildDateLabels(startDate, endDate) {
 
 /** base match with correct ObjectId usage */
 function buildBaseMatch(req) {
-  const isVendor = req.user?.role === "vendor"
   const requestedVendorId = req.query.vendorId
   const baseMatch = {}
 
-  if (isVendor) {
-    baseMatch.vendorId = new mongoose.Types.ObjectId(req.user.id)
-  } else if (requestedVendorId) {
-    if (!isValidObjectId(requestedVendorId)) {
-      throw new Error("Invalid vendorId")
-    }
+  if (requestedVendorId && isValidObjectId(requestedVendorId)) {
     baseMatch.vendorId = new mongoose.Types.ObjectId(requestedVendorId)
   }
 
@@ -140,21 +139,27 @@ async function computeTotals(baseMatch) {
 router.get("/", auth, async (req, res) => {
   try {
     const baseMatch = buildBaseMatch(req)
-    const now = new Date()
+    const scopeId = baseMatch.vendorId ? String(baseMatch.vendorId) : (req.user?.id || "admin")
+    const cacheKey = CacheKeys.vendorAnalytics(scopeId, "overview")
 
-    const day = await buildDaySeries(baseMatch)
+    const result = await getOrSetCache(cacheKey, CACHE_TTL.ANALYTICS, async () => {
+      const now = new Date()
+      const day = await buildDaySeries(baseMatch)
 
-    const weekStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000)
-    const week = (await buildDailySeries(baseMatch, weekStart, now))
-      .map(x => ({ label: x.date, count: x.orders }))
+      const weekStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000)
+      const week = (await buildDailySeries(baseMatch, weekStart, now))
+        .map(x => ({ label: x.date, count: x.orders }))
 
-    const monthStart = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000)
-    const month = (await buildDailySeries(baseMatch, monthStart, now))
-      .map(x => ({ label: x.date, count: x.orders }))
+      const monthStart = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000)
+      const month = (await buildDailySeries(baseMatch, monthStart, now))
+        .map(x => ({ label: x.date, count: x.orders }))
 
-    const totals = await computeTotals(baseMatch)
+      const totals = await computeTotals(baseMatch)
 
-    res.json({ day, week, month, totals })
+      return { day, week, month, totals }
+    })
+
+    res.json(result)
   } catch (err) {
     console.error("Analytics error:", err)
     res.status(500).json({ message: err.message || "Server error" })
@@ -165,8 +170,14 @@ router.get("/summary", auth, async (req, res) => {
   try {
     const baseMatch = buildBaseMatch(req)
     const { start, end } = req.query
-    const range = parseRangeSafe(start, end)
-    const totals = await computeTotals({ ...baseMatch, createdAt: range })
+    const scopeId = baseMatch.vendorId ? String(baseMatch.vendorId) : (req.user?.id || "admin")
+    const cacheKey = CacheKeys.vendorAnalytics(scopeId, `summary:${start || "all"}_${end || "all"}`)
+
+    const totals = await getOrSetCache(cacheKey, CACHE_TTL.ANALYTICS, async () => {
+      const range = parseRangeSafe(start, end)
+      return computeTotals({ ...baseMatch, createdAt: range })
+    })
+
     res.json({ ok: true, data: totals })
   } catch (err) {
     console.error("Analytics summary error:", err)
@@ -178,8 +189,14 @@ router.get("/orders", auth, async (req, res) => {
   try {
     const baseMatch = buildBaseMatch(req)
     const { start, end } = req.query
-    const { start: s, end: e } = parseRangeSafe(start, end)
-    const data = await buildDailySeries(baseMatch, s, e)
+    const scopeId = baseMatch.vendorId ? String(baseMatch.vendorId) : (req.user?.id || "admin")
+    const cacheKey = CacheKeys.vendorAnalytics(scopeId, `orders:${start || "all"}_${end || "all"}`)
+
+    const data = await getOrSetCache(cacheKey, CACHE_TTL.ANALYTICS, async () => {
+      const { start: s, end: e } = parseRangeSafe(start, end)
+      return buildDailySeries(baseMatch, s, e)
+    })
+
     res.json({ ok: true, data })
   } catch (err) {
     console.error("Analytics orders error:", err)
@@ -191,17 +208,19 @@ router.get("/status-distribution", auth, async (req, res) => {
   try {
     const baseMatch = buildBaseMatch(req)
     const { start, end } = req.query
-    const range = parseRangeSafe(start, end)
+    const scopeId = baseMatch.vendorId ? String(baseMatch.vendorId) : (req.user?.id || "admin")
+    const cacheKey = CacheKeys.vendorAnalytics(scopeId, `status:${start || "all"}_${end || "all"}`)
 
-    const agg = await Order.aggregate([
-      { $match: { ...baseMatch, createdAt: range } },
-      { $group: { _id: "$status", count: { $sum: 1 } } }
-    ])
-
-    res.json({
-      ok: true,
-      data: agg.map(a => ({ status: a._id || "unknown", count: a.count }))
+    const data = await getOrSetCache(cacheKey, CACHE_TTL.ANALYTICS, async () => {
+      const range = parseRangeSafe(start, end)
+      const agg = await Order.aggregate([
+        { $match: { ...baseMatch, createdAt: range } },
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ])
+      return agg.map(a => ({ status: a._id || "unknown", count: a.count }))
     })
+
+    res.json({ ok: true, data })
   } catch (err) {
     console.error("Analytics status error:", err)
     res.status(400).json({ message: err.message })

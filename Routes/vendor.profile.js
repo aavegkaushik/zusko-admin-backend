@@ -2,6 +2,7 @@ import express from "express";
 import auth from "../Middleware/auth.middleware.js";
 import Vendor from "../Models/Vendor.js";
 import { uploadAvatar } from "../Middleware/upload.middleware.js";
+import { invalidateVendorCache } from "../services/cache.service.js";
 
 const router = express.Router();
 
@@ -34,6 +35,8 @@ router.patch(
         { $set: updates },
         { new: true }
       ).select("name email avatar");
+
+      await invalidateVendorCache(req.user.id);
 
       res.json({ ok: true, vendor });
     } catch (err) {

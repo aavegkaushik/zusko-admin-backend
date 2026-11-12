@@ -9,6 +9,12 @@ import { sendEmail } from "../utils/sendmail.js";
 import { generateDeliveredEmail } from "../utils/orderEmails.js";
 import { emitToVendor } from "../socket.js";
 import {
+  getOrSetCache,
+  invalidateOrderCache,
+  CacheKeys,
+  CACHE_TTL,
+} from "../services/cache.service.js";
+import {
   syncPartnerAvailability,
   assignPickupPartner,
   assignDeliveryPartner,
@@ -36,10 +42,10 @@ const ALLOWED_STATUSES = [
 // GET /api/orders
 // Vendor: sees only their orders
 // Admin: can see all (or filter by vendorId)
+// Cached in Redis with TTL 30s
 // ---------------------------
 router.get("/", auth, async (req, res) => {
   try {
-
     const isVendor = req.user.role === "vendor"
     const { page = 1, limit = 25, status, vendorId, start, end, sort = "-createdAt" } = req.query
     const p = Math.max(1, parseInt(page, 10) || 1)
@@ -47,13 +53,11 @@ router.get("/", auth, async (req, res) => {
 
     const filter = {}
 
-    // if (isVendor) {
-    //   // vendors can only fetch their own orders
-    //   filter.vendorId = req.user.id
-    // } else if (vendorId) {
-    //   if (!isValidObjectId(vendorId)) return res.status(400).json({ message: "Invalid vendorId" })
-    //   filter.vendorId = vendorId
-    // }
+    // Filter by vendorId only if explicitly requested in query
+    if (vendorId) {
+      if (!isValidObjectId(vendorId)) return res.status(400).json({ message: "Invalid vendorId" })
+      filter.vendorId = vendorId
+    }
 
     if (status) filter.status = status
 
@@ -73,19 +77,28 @@ router.get("/", auth, async (req, res) => {
       if (Object.keys(filter.createdAt).length === 0) delete filter.createdAt
     }
 
-    const total = await Order.countDocuments(filter)
-    const orders = await Order.find(filter)
-      .populate("pickupPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
-      .populate("deliveryPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
-      .sort(sort)
-      .skip((p - 1) * l)
-      .limit(l)
-      .lean()
+    // Isolated cache key
+    const scope = vendorId ? `vendor:${vendorId}` : (isVendor ? `vendor:${req.user.id}` : "admin")
+    const filterHash = `${p}_${l}_${status || "all"}_${vendorId || "all"}_${start || "none"}_${end || "none"}_${sort}`
+    const cacheKey = `orders:${scope}:${filterHash}`
 
-    res.json({
-      meta: { page: p, limit: l, total, pages: Math.ceil(total / l) },
-      data: orders,
+    const result = await getOrSetCache(cacheKey, CACHE_TTL.ORDERS_LIST, async () => {
+      const total = await Order.countDocuments(filter)
+      const orders = await Order.find(filter)
+        .populate("pickupPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
+        .populate("deliveryPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
+        .sort(sort)
+        .skip((p - 1) * l)
+        .limit(l)
+        .lean()
+
+      return {
+        meta: { page: p, limit: l, total, pages: Math.ceil(total / l) },
+        data: orders,
+      }
     })
+
+    res.json(result)
   } catch (err) {
     console.error("GET /api/orders error:", err)
     res.status(500).json({ message: "Server error", error: err.message })
@@ -94,25 +107,26 @@ router.get("/", auth, async (req, res) => {
 
 // ---------------------------
 // GET /api/orders/:id
-// Vendor only their orders
+// Cached in Redis with TTL 60s
 // ---------------------------
 router.get("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params
     if (!isValidObjectId(id)) return res.status(400).json({ message: "Invalid order id" })
 
-    const order = await Order.findById(id)
-      .populate("pickupPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
-      .populate("deliveryPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
-      .populate("assignmentHistory.partnerId", "partnerId fullName mobileNumber avatar")
-      .populate("assignmentHistory.previousPartnerId", "partnerId fullName mobileNumber avatar")
-      .populate("assignmentHistory.assignedBy", "name email")
-      .lean()
-    if (!order) return res.status(404).json({ message: "Order not found" })
+    const cacheKey = CacheKeys.singleOrder(id)
 
-    // if (req.user.role === "vendor" && String(order.vendorId) !== String(req.user.id)) {
-    //   return res.status(403).json({ message: "Forbidden" })
-    // }
+    const order = await getOrSetCache(cacheKey, CACHE_TTL.ORDER_SINGLE, async () => {
+      return Order.findById(id)
+        .populate("pickupPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
+        .populate("deliveryPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
+        .populate("assignmentHistory.partnerId", "partnerId fullName mobileNumber avatar")
+        .populate("assignmentHistory.previousPartnerId", "partnerId fullName mobileNumber avatar")
+        .populate("assignmentHistory.assignedBy", "name email")
+        .lean()
+    })
+
+    if (!order) return res.status(404).json({ message: "Order not found" })
 
     res.json({ data: order })
   } catch (err) {
@@ -196,6 +210,9 @@ emitToVendor(order.vendorId, "new_order", {
 console.log(
   `🔔 New order event emitted for vendor ${order.vendorId}`
 );
+
+// Invalidate relevant caches immediately after successful order persistence
+await invalidateOrderCache(order._id, order.vendorId);
 
 return res.status(201).json({
   message: "Order created",
@@ -351,6 +368,9 @@ if (
     if (order.deliveryPartner?.partnerId) {
       await syncPartnerAvailability(order.deliveryPartner.partnerId);
     }
+
+    // Invalidate order & vendor cache after state change
+    await invalidateOrderCache(id, updated.vendorId);
 
     return res.json({
       message: "Status updated",
@@ -510,6 +530,9 @@ console.log(
       `Order ${updated.orderId || updated._id} accepted by ${req.user.email || req.user.id}`
     )
 
+    // Invalidate order and vendor caches after acceptance
+    await invalidateOrderCache(id, updated.vendorId);
+
     return res.json({
       success: true,
       message: "Order accepted successfully",
@@ -551,6 +574,7 @@ router.put("/:id", auth, async (req, res) => {
     })
 
     await order.save()
+    await invalidateOrderCache(id, order.vendorId);
     res.json({ message: "Order updated", data: order })
   } catch (err) {
     console.error("PUT /api/orders/:id error:", err)
@@ -570,6 +594,7 @@ router.delete("/:id", auth, async (req, res) => {
     const order = await Order.findByIdAndDelete(id)
     if (!order) return res.status(404).json({ message: "Order not found" })
 
+    await invalidateOrderCache(id, order.vendorId);
     res.json({ message: "Order deleted", data: order })
   } catch (err) {
     console.error("DELETE /api/orders/:id error:", err)

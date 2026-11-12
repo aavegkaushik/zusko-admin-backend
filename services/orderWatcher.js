@@ -2,6 +2,7 @@
 
 import Order from "../Models/Order.js";
 import { emitToVendor, emitGlobal } from "../socket.js";
+import { invalidateOrderCache } from "./cache.service.js";
 
 let watcherActive = false;
 let pollingIntervalId = null;
@@ -102,6 +103,7 @@ function handleDatabaseChange(change) {
             order: doc,
             orderId: doc._id,
           });
+          invalidateOrderCache(orderId, doc.vendorId).catch(() => {});
         }
       }
     } else if (change.operationType === "update" || change.operationType === "replace") {
@@ -127,6 +129,8 @@ function handleDatabaseChange(change) {
             status: "accepted",
           });
         }
+
+        invalidateOrderCache(orderId, doc.vendorId).catch(() => {});
       } else if (newStatus === "pending") {
         knownPendingOrders.set(orderId, "pending");
       }
@@ -165,6 +169,7 @@ function setupPollingWatcher() {
             order,
             orderId: order._id,
           });
+          invalidateOrderCache(order._id, order.vendorId).catch(() => {});
         }
       }
 
@@ -193,6 +198,8 @@ function setupPollingWatcher() {
                   status: "accepted",
                 });
               }
+
+              invalidateOrderCache(id, updatedDoc?.vendorId).catch(() => {});
             }
           } catch {}
         }

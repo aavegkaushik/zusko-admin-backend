@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 import DeliveryPartner from "../Models/DeliveryPartner.js";
 import Order from "../Models/Order.js";
 import { emitToVendor } from "../socket.js";
+import {
+  invalidateOrderCache,
+  deleteCache,
+  CacheKeys,
+} from "../services/cache.service.js";
 
 // =========================================================
 // HELPER: SYNC PARTNER AVAILABILITY
@@ -590,6 +595,8 @@ export async function assignPickupPartner(req, res) {
       });
     }
 
+    await invalidateOrderCache(order._id, order.vendorId);
+
     return res.json({
       success: true,
       message: isReassignment
@@ -685,6 +692,8 @@ export async function removePickupPartner(req, res) {
       .populate("assignmentHistory.partnerId", "partnerId fullName mobileNumber avatar")
       .populate("assignmentHistory.previousPartnerId", "partnerId fullName mobileNumber avatar")
       .lean();
+
+    await invalidateOrderCache(order._id, order.vendorId);
 
     return res.json({
       success: true,
@@ -825,6 +834,8 @@ export async function assignDeliveryPartner(req, res) {
       });
     }
 
+    await invalidateOrderCache(order._id, order.vendorId);
+
     return res.json({
       success: true,
       message: isReassignment
@@ -919,6 +930,8 @@ export async function updatePickupStatus(req, res) {
       .populate("deliveryPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
       .lean();
 
+    await invalidateOrderCache(order._id, order.vendorId);
+
     return res.json({
       success: true,
       message: `Pickup status updated to '${status}'`,
@@ -1012,6 +1025,8 @@ export async function updateDeliveryStatus(req, res) {
       .populate("pickupPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
       .populate("deliveryPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
       .lean();
+
+    await invalidateOrderCache(order._id, order.vendorId);
 
     return res.json({
       success: true,

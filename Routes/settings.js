@@ -2,6 +2,12 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import auth from "../Middleware/auth.middleware.js";
 import User from "../Models/Vendor.js";
+import {
+  getOrSetCache,
+  invalidateVendorCache,
+  CacheKeys,
+  CACHE_TTL,
+} from "../services/cache.service.js";
 
 const router = express.Router();
 
@@ -10,7 +16,11 @@ const router = express.Router();
 // -----------------------------
 router.get("/", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select("-password");
+    const cacheKey = CacheKeys.vendorProfile(req.user.id);
+    const user = await getOrSetCache(cacheKey, CACHE_TTL.VENDOR_PROFILE, async () => {
+      return User.findById(req.user.id).select("-password").lean();
+    });
+
     if (!user) return res.status(404).json({ message: "Vendor not found" });
 
     res.json({ ok: true, data: user });
@@ -42,6 +52,8 @@ router.put("/", auth, async (req, res) => {
       new: true,
       runValidators: true,
     }).select("-password");
+
+    await invalidateVendorCache(req.user.id);
 
     res.json({ ok: true, data: updated });
   } catch (err) {
