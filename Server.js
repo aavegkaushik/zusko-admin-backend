@@ -24,6 +24,7 @@ import couponRoutes from "./Routes/coupon.routes.js";
 import promotionRoutes from "./Routes/promotion.routes.js";
 import deliveryPartnerRoutes from "./Routes/deliveryPartner.routes.js";
 import { initSocket } from "./socket.js";
+import { startOrderWatcher, stopOrderWatcher } from "./services/orderWatcher.js";
 // import paymentWebhookRoutes from "./Routes/payment.webhook.js";
 // --- Config (from env) ---
 
@@ -201,9 +202,13 @@ initSocket(server);
 
 console.log("🔌 Socket.IO initialized");
 
+// Start real-time order watcher (MongoDB Change Streams + resilient polling fallback)
+startOrderWatcher();
+
   // Graceful shutdown
   const shutdown = async (signal) => {
     console.log(`\nReceived ${signal}. Closing server...`)
+    stopOrderWatcher();
     server.close(async (err) => {
       if (err) {
         console.error('Error closing server', err)

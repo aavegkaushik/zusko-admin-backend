@@ -1,6 +1,7 @@
 // backend/socket.js
 
 import { Server } from "socket.io";
+import Order from "./Models/Order.js";
 
 let io = null;
 
@@ -28,28 +29,44 @@ export function initSocket(server) {
     console.log("🔌 Dashboard connected:", socket.id);
 
     /**
-     * Vendor/Admin joins their own room.
-     *
-     * Example:
-     * vendor:USER_ID
+     * Vendor/Admin joins dashboard rooms.
      */
-    socket.on("join_dashboard", ({ userId, role }) => {
-      if (!userId) {
-        console.warn("join_dashboard called without userId");
-        return;
+    socket.on("join_dashboard", async (payload = {}) => {
+      const { userId, role } = payload;
+
+      // 1. Join user-specific vendor room
+      if (userId) {
+        socket.join(`vendor:${userId}`);
       }
 
-      const room = `vendor:${userId}`;
-
-      socket.join(room);
+      // 2. Join central admin & orders room
+      socket.join("admin_dashboard");
+      socket.join("orders");
 
       console.log(
-        `📡 ${role || "user"} joined dashboard room: ${room}`
+        `📡 ${role || "operator"} connected to admin_dashboard (vendor:${userId || "central"})`
       );
+
+      // 3. Send current pending unaccepted orders to newly connected client
+      try {
+        const pendingOrders = await Order.find({ status: "pending" })
+          .sort({ createdAt: -1 })
+          .limit(50)
+          .lean();
+
+        socket.emit("initial_pending_orders", {
+          success: true,
+          count: pendingOrders.length,
+          orders: pendingOrders,
+        });
+      } catch (err) {
+        console.warn("Could not fetch initial pending orders for socket:", err.message);
+      }
 
       socket.emit("dashboard_connected", {
         success: true,
-        room,
+        room: userId ? `vendor:${userId}` : "admin_dashboard",
+        adminRoom: "admin_dashboard",
       });
     });
 
@@ -78,26 +95,36 @@ export function getIO() {
 }
 
 /**
- * Emit event to a specific vendor/admin room.
+ * Emit event to a specific vendor room and all dashboard admins.
  */
 export function emitToVendor(vendorId, event, data) {
   if (!io) {
-    console.warn(
-      "Socket.IO is not initialized. Event skipped:",
-      event
-    );
+    console.warn("Socket.IO is not initialized. Event skipped:", event);
     return;
   }
 
-  if (!vendorId) {
-    console.warn(
-      "emitToVendor called without vendorId:",
-      event
-    );
-    return;
+  // 1. Emit to specific vendor room
+  if (vendorId) {
+    io.to(`vendor:${vendorId}`).emit(event, data);
   }
 
-  io.to(`vendor:${vendorId}`).emit(event, data);
+  // 2. Broadcast to admin_dashboard room (all staff/store managers)
+  io.to("admin_dashboard").emit(event, data);
+
+  // 3. Emit hyphenated/underscored variants for event interoperability
+  if (event === "new_order") {
+    io.to("admin_dashboard").emit("new-order", data);
+    if (vendorId) io.to(`vendor:${vendorId}`).emit("new-order", data);
+  } else if (event === "new-order") {
+    io.to("admin_dashboard").emit("new_order", data);
+    if (vendorId) io.to(`vendor:${vendorId}`).emit("new_order", data);
+  } else if (event === "order_accepted") {
+    io.to("admin_dashboard").emit("order-accepted", data);
+    if (vendorId) io.to(`vendor:${vendorId}`).emit("order-accepted", data);
+  } else if (event === "order-accepted") {
+    io.to("admin_dashboard").emit("order_accepted", data);
+    if (vendorId) io.to(`vendor:${vendorId}`).emit("order_accepted", data);
+  }
 }
 
 /**
@@ -105,12 +132,19 @@ export function emitToVendor(vendorId, event, data) {
  */
 export function emitGlobal(event, data) {
   if (!io) {
-    console.warn(
-      "Socket.IO is not initialized. Event skipped:",
-      event
-    );
+    console.warn("Socket.IO is not initialized. Event skipped:", event);
     return;
   }
 
   io.emit(event, data);
+
+  if (event === "new_order") {
+    io.emit("new-order", data);
+  } else if (event === "new-order") {
+    io.emit("new_order", data);
+  } else if (event === "order_accepted") {
+    io.emit("order-accepted", data);
+  } else if (event === "order-accepted") {
+    io.emit("order_accepted", data);
+  }
 }
