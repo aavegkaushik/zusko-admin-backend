@@ -26,7 +26,8 @@ router.post("/orders/:id", auth, async (req, res) => {
     // Role check
     // -----------------------------------------
 
-    if (!["admin", "vendor"].includes(req.user.role)) {
+    const role = req.user?.role?.toLowerCase();
+    if (!["admin", "vendor", "superadmin"].includes(role)) {
       return res.status(403).json({
         success: false,
         message: "Admin or vendor access required",
@@ -43,20 +44,6 @@ router.post("/orders/:id", auth, async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Order not found",
-      });
-    }
-
-    // -----------------------------------------
-    // Vendor can only access own orders
-    // -----------------------------------------
-
-    if (
-      req.user.role === "vendor" &&
-      String(order.vendorId) !== String(req.user.id)
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not allowed to access this order",
       });
     }
 
@@ -168,7 +155,8 @@ router.get("/resolve/:qrId", auth, async (req, res) => {
     // Role check
     // -----------------------------------------
 
-    if (!["admin", "vendor"].includes(req.user.role)) {
+    const role = req.user?.role?.toLowerCase();
+    if (!["admin", "vendor", "superadmin"].includes(role)) {
       return res.status(403).json({
         success: false,
         message: "Admin or vendor access required",
@@ -226,20 +214,6 @@ router.get("/resolve/:qrId", auth, async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Invalid QR code or order not found",
-      });
-    }
-
-    // -----------------------------------------
-    // Vendor ownership check
-    // -----------------------------------------
-
-    if (
-      req.user.role === "vendor" &&
-      String(order.vendorId) !== String(req.user.id)
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not allowed to access this order",
       });
     }
 
@@ -346,7 +320,8 @@ router.post("/scan", auth, async (req, res) => {
     // Role check
     // -----------------------------------------
 
-    if (!["admin", "vendor"].includes(req.user.role)) {
+    const role = req.user?.role?.toLowerCase();
+    if (!["admin", "vendor", "superadmin"].includes(role)) {
       return res.status(403).json({
         success: false,
         message: "Admin or vendor access required",
@@ -418,20 +393,6 @@ router.post("/scan", auth, async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Invalid QR code or order not found",
-      });
-    }
-
-    // -----------------------------------------
-    // Vendor ownership
-    // -----------------------------------------
-
-    if (
-      req.user.role === "vendor" &&
-      String(order.vendorId) !== String(req.user.id)
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not allowed to access this order",
       });
     }
 
@@ -520,7 +481,8 @@ router.get(
       // Role check
       // -----------------------------------------
 
-      if (!["admin", "vendor"].includes(req.user.role)) {
+      const role = req.user?.role?.toLowerCase();
+      if (!["admin", "vendor", "superadmin"].includes(role)) {
         return res.status(403).json({
           success: false,
           message: "Admin or vendor access required",
@@ -537,20 +499,6 @@ router.get(
         return res.status(404).json({
           success: false,
           message: "Order not found",
-        });
-      }
-
-      // -----------------------------------------
-      // Vendor ownership
-      // -----------------------------------------
-
-      if (
-        req.user.role === "vendor" &&
-        String(order.vendorId) !== String(req.user.id)
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "You are not allowed to access this order",
         });
       }
 
@@ -623,7 +571,8 @@ router.post(
       // Role check
       // -----------------------------------------
 
-      if (!["admin", "vendor"].includes(req.user.role)) {
+      const role = req.user?.role?.toLowerCase();
+      if (!["admin", "vendor", "superadmin"].includes(role)) {
         return res.status(403).json({
           success: false,
           message: "Admin or vendor access required",
@@ -651,20 +600,6 @@ router.post(
         return res.status(404).json({
           success: false,
           message: "Order not found",
-        });
-      }
-
-      // -----------------------------------------
-      // Vendor ownership
-      // -----------------------------------------
-
-      if (
-        req.user.role === "vendor" &&
-        String(order.vendorId) !== String(req.user.id)
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "You are not allowed to access this order",
         });
       }
 
@@ -772,7 +707,8 @@ router.post(
       // Role check
       // -----------------------------------------
 
-      if (!["admin", "vendor"].includes(req.user.role)) {
+      const role = req.user?.role?.toLowerCase();
+      if (!["admin", "vendor", "superadmin"].includes(role)) {
         return res.status(403).json({
           success: false,
           message: "Admin or vendor access required",
@@ -829,22 +765,6 @@ router.post(
           success: false,
           message:
             "Expected order not found",
-        });
-      }
-
-      // -----------------------------------------
-      // Vendor ownership
-      // -----------------------------------------
-
-      if (
-        req.user.role === "vendor" &&
-        String(expectedOrder.vendorId) !==
-          String(req.user.id)
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "You are not allowed to process this order",
         });
       }
 
@@ -907,22 +827,6 @@ router.post(
 
             scannedOrder: null,
           },
-        });
-      }
-
-      // -----------------------------------------
-      // Vendor ownership of scanned order
-      // -----------------------------------------
-
-      if (
-        req.user.role === "vendor" &&
-        String(scannedOrder.vendorId) !==
-          String(req.user.id)
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "You are not allowed to access this QR",
         });
       }
 
@@ -1089,7 +993,8 @@ router.post(
       // Role check
       // -----------------------------------------
 
-      if (!["admin", "vendor"].includes(req.user.role)) {
+      const role = req.user?.role?.toLowerCase();
+      if (!["admin", "vendor", "superadmin"].includes(role)) {
         return res.status(403).json({
           success: false,
           message:
@@ -1141,22 +1046,6 @@ router.post(
           success: false,
           message:
             "Order not found",
-        });
-      }
-
-      // -----------------------------------------
-      // Vendor ownership
-      // -----------------------------------------
-
-      if (
-        req.user.role === "vendor" &&
-        String(order.vendorId) !==
-          String(req.user.id)
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "You are not allowed to complete this session",
         });
       }
 
@@ -1288,7 +1177,8 @@ router.post(
       // Role check
       // -----------------------------------------
 
-      if (!["admin", "vendor"].includes(req.user.role)) {
+      const role = req.user?.role?.toLowerCase();
+      if (!["admin", "vendor", "superadmin"].includes(role)) {
         return res.status(403).json({
           success: false,
           message: "Admin or vendor access required",
@@ -1334,20 +1224,6 @@ router.post(
         return res.status(404).json({
           success: false,
           message: "Order not found",
-        });
-      }
-
-      // -----------------------------------------
-      // Vendor ownership
-      // -----------------------------------------
-
-      if (
-        req.user.role === "vendor" &&
-        String(order.vendorId) !== String(req.user.id)
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "You are not allowed to stop this session",
         });
       }
 

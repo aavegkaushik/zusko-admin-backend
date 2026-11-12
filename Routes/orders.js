@@ -8,6 +8,14 @@ import Order from "../Models/Order.js"
 import { sendEmail } from "../utils/sendmail.js";
 import { generateDeliveredEmail } from "../utils/orderEmails.js";
 import { emitToVendor } from "../socket.js";
+import {
+  syncPartnerAvailability,
+  assignPickupPartner,
+  assignDeliveryPartner,
+  updatePickupStatus,
+  updateDeliveryStatus,
+  removePickupPartner
+} from "../controllers/deliveryPartner.controller.js";
 const router = express.Router()
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id)
@@ -66,7 +74,13 @@ router.get("/", auth, async (req, res) => {
     }
 
     const total = await Order.countDocuments(filter)
-    const orders = await Order.find(filter).sort(sort).skip((p - 1) * l).limit(l).lean()
+    const orders = await Order.find(filter)
+      .populate("pickupPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
+      .populate("deliveryPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
+      .sort(sort)
+      .skip((p - 1) * l)
+      .limit(l)
+      .lean()
 
     res.json({
       meta: { page: p, limit: l, total, pages: Math.ceil(total / l) },
@@ -87,7 +101,13 @@ router.get("/:id", auth, async (req, res) => {
     const { id } = req.params
     if (!isValidObjectId(id)) return res.status(400).json({ message: "Invalid order id" })
 
-    const order = await Order.findById(id).lean()
+    const order = await Order.findById(id)
+      .populate("pickupPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
+      .populate("deliveryPartner.partnerId", "partnerId fullName mobileNumber avatar availabilityStatus isActive")
+      .populate("assignmentHistory.partnerId", "partnerId fullName mobileNumber avatar")
+      .populate("assignmentHistory.previousPartnerId", "partnerId fullName mobileNumber avatar")
+      .populate("assignmentHistory.assignedBy", "name email")
+      .lean()
     if (!order) return res.status(404).json({ message: "Order not found" })
 
     // if (req.user.role === "vendor" && String(order.vendorId) !== String(req.user.id)) {
@@ -204,24 +224,41 @@ router.patch("/:id/status", auth, async (req, res) => {
     const order = await Order.findById(id).lean()
     if (!order) return res.status(404).json({ message: "Order not found" })
 
-    // Vendor may only update their orders
-    if (req.user.role === "vendor" && String(order.vendorId) !== String(req.user.id)) {
-      return res.status(403).json({ message: "Forbidden" })
-    }
-
     // simple transition guard
     if (order.status === "cancelled") {
       return res.status(400).json({ message: "Cannot change status of cancelled order" })
     }
 
+    // Business rule: Do not allow an order to move to out-for-delivery without a delivery partner
+    if (status === "out-for-delivery" && !order.deliveryPartner?.partnerId) {
+      return res.status(400).json({
+        message: "Cannot move order to out-for-delivery without an assigned delivery partner. Please assign a delivery partner first.",
+      });
+    }
+
     // Build update object - set fields server-side when necessary
     const update = { status, updatedAt: new Date() }
 
-    if (status === "picked-up" && !order.pickedAt) {
-  update.pickedAt = new Date();
-}
-    if (status === "completed" && !order.deliveredAt) {
-      update.deliveredAt = new Date()
+    if (status === "picked-up") {
+      if (!order.pickedAt) update.pickedAt = new Date();
+      if (order.pickupPartner?.partnerId) {
+        update["pickupPartner.status"] = "completed";
+        update["pickupPartner.pickedUpAt"] = new Date();
+      }
+    }
+
+    if (status === "out-for-delivery") {
+      if (order.deliveryPartner?.partnerId) {
+        update["deliveryPartner.status"] = "on-the-way";
+      }
+    }
+
+    if (status === "completed") {
+      if (!order.deliveredAt) update.deliveredAt = new Date();
+      if (order.deliveryPartner?.partnerId) {
+        update["deliveryPartner.status"] = "completed";
+        update["deliveryPartner.deliveredAt"] = new Date();
+      }
     }
 
     // If you want to record status history on the document and your pre-save is broken,
@@ -308,10 +345,17 @@ if (
   );
 }
 
-return res.json({
-  message: "Status updated",
-  data: updated,
-});
+    if (order.pickupPartner?.partnerId) {
+      await syncPartnerAvailability(order.pickupPartner.partnerId);
+    }
+    if (order.deliveryPartner?.partnerId) {
+      await syncPartnerAvailability(order.deliveryPartner.partnerId);
+    }
+
+    return res.json({
+      message: "Status updated",
+      data: updated,
+    });
   } catch (err) {
     console.error("PATCH /api/orders/:id/status error:", err)
     return res.status(500).json({ message: "Server error", error: err.message })
@@ -336,7 +380,8 @@ router.post("/:id/accept", auth, async (req, res) => {
     }
 
     // Only admin/vendor can accept orders
-    if (!["admin", "vendor"].includes(req.user.role)) {
+    const role = req.user?.role?.toLowerCase();
+    if (!["admin", "vendor", "superadmin"].includes(role)) {
       return res.status(403).json({
         message: "Only admin or vendor can accept orders",
       })
@@ -350,11 +395,6 @@ router.post("/:id/accept", auth, async (req, res) => {
       {
         _id: id,
         status: "pending",
-
-        // Vendor can only accept their own order.
-        ...(req.user.role === "vendor"
-          ? { vendorId: req.user.id }
-          : {}),
       },
       {
         $set: {
@@ -366,7 +406,7 @@ router.post("/:id/accept", auth, async (req, res) => {
       },
       {
         new: true,
-        runValidators: true,
+        runValidators: false,
       }
     ).lean()
 
@@ -405,16 +445,6 @@ router.post("/:id/accept", auth, async (req, res) => {
   if (!existingOrder) {
     return res.status(404).json({
       message: "Order not found",
-    });
-  }
-
-  if (
-    req.user.role === "vendor" &&
-    String(existingOrder.vendorId) !==
-      String(req.user.id)
-  ) {
-    return res.status(403).json({
-      message: "You are not allowed to accept this order",
     });
   }
 
@@ -507,11 +537,6 @@ router.put("/:id", auth, async (req, res) => {
     const order = await Order.findById(id)
     if (!order) return res.status(404).json({ message: "Order not found" })
 
-    // vendor authorization
-    if (req.user.role === "vendor" && String(order.vendorId) !== String(req.user.id)) {
-      return res.status(403).json({ message: "Forbidden" })
-    }
-
     // Only admin may change vendorId
     if (req.body.vendorId && req.user.role !== "admin") {
       delete req.body.vendorId
@@ -551,6 +576,15 @@ router.delete("/:id", auth, async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message })
   }
 })
+
+// =========================================================
+// DELIVERY PARTNER ASSIGNMENT ROUTES
+// =========================================================
+router.post("/:orderId/assign-pickup-partner", auth, assignPickupPartner);
+router.delete("/:orderId/pickup-partner", auth, removePickupPartner);
+router.post("/:orderId/assign-delivery-partner", auth, assignDeliveryPartner);
+router.patch("/:orderId/pickup-status", auth, updatePickupStatus);
+router.patch("/:orderId/delivery-status", auth, updateDeliveryStatus);
 
 export default router
 

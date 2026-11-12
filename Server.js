@@ -22,6 +22,7 @@ import businessQuoteRoutes from "./Routes/businessQuote.route.js";
 import pricingRoutes from "./Routes/pricing.js";
 import couponRoutes from "./Routes/coupon.routes.js";
 import promotionRoutes from "./Routes/promotion.routes.js";
+import deliveryPartnerRoutes from "./Routes/deliveryPartner.routes.js";
 import { initSocket } from "./socket.js";
 // import paymentWebhookRoutes from "./Routes/payment.webhook.js";
 // --- Config (from env) ---
@@ -138,6 +139,8 @@ app.use("/api/pricing", pricingRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/promotions", promotionRoutes);
 app.use("/promotions", promotionRoutes);
+app.use("/api/delivery-partners", deliveryPartnerRoutes);
+app.use("/delivery-partners", deliveryPartnerRoutes);
 
 app.use(
   "/api/business-leads",

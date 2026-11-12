@@ -398,6 +398,104 @@ const OrderSchema = new Schema(
     },
 
     // ========================================
+    // DELIVERY PARTNER ASSIGNMENTS
+    // ========================================
+
+    pickupPartner: {
+      partnerId: {
+        type: Schema.Types.ObjectId,
+        ref: "DeliveryPartner",
+        default: null,
+        index: true,
+      },
+      assignedAt: {
+        type: Date,
+        default: null,
+      },
+      assignedBy: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      status: {
+        type: String,
+        enum: ["assigned", "on-the-way", "completed"],
+        default: "assigned",
+      },
+      pickedUpAt: {
+        type: Date,
+        default: null,
+      },
+    },
+
+    deliveryPartner: {
+      partnerId: {
+        type: Schema.Types.ObjectId,
+        ref: "DeliveryPartner",
+        default: null,
+        index: true,
+      },
+      assignedAt: {
+        type: Date,
+        default: null,
+      },
+      assignedBy: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      status: {
+        type: String,
+        enum: ["assigned", "on-the-way", "completed"],
+        default: "assigned",
+      },
+      deliveredAt: {
+        type: Date,
+        default: null,
+      },
+    },
+
+    assignmentHistory: {
+      type: [
+        {
+          assignmentType: {
+            type: String,
+            enum: ["pickup", "delivery"],
+            required: true,
+          },
+          previousPartnerId: {
+            type: Schema.Types.ObjectId,
+            ref: "DeliveryPartner",
+            default: null,
+          },
+          partnerId: {
+            type: Schema.Types.ObjectId,
+            ref: "DeliveryPartner",
+            default: null,
+          },
+          assignedBy: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
+          },
+          assignedAt: {
+            type: Date,
+            default: Date.now,
+          },
+          status: {
+            type: String,
+            default: "assigned",
+          },
+          note: {
+            type: String,
+            default: "",
+          },
+        },
+      ],
+      default: [],
+    },
+
+    // ========================================
     // NOTES
     // ========================================
 
